@@ -533,3 +533,8 @@ code { background: #edf0e9; padding: 2px 5px; border-radius: 4px; }
   .segment-settings form, .feedback-options, .rich-follow-up-form { grid-template-columns: 1fr; }
 }
 
+
+.viewer-banner { padding: 12px 24px; background: #123f35; color: #fff; border-bottom: 3px solid #d3b56b; font-size: 14px; }
+.viewer-banner strong { margin-right: 12px; color: #f6d994; }
+.segment-settings input:disabled { opacity: 1; color: #24483e; background: #edf2ee; cursor: default; }
+.mapping-card > form { display: grid; gap: 12px; }

@@ -79,7 +79,8 @@ const formatDateTime = (value?: string) => value
   : "";
 
 export function CustomerTable({ customers, sort, direction, search, followUpStatus,
-  segment, tag, salesSignal }: {
+  segment, tag, salesSignal, canWrite }: {
+  canWrite: boolean;
   customers: Customer[]; sort: string; direction: string; search: string;
   followUpStatus: string; segment: string; tag: string; salesSignal: string;
 }) {
@@ -210,7 +211,7 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
       const customer = { ...baseCustomer, ...followUpOverrides[baseCustomer.id] };
       const expanded = openCustomer === customer.id;
       const detail = customerDetails[customer.id];
-      return <CustomerRows key={customer.id} customer={customer} expanded={expanded}
+      return <CustomerRows canWrite={canWrite} key={customer.id} customer={customer} expanded={expanded}
         tone={index % 2} detail={detail} openOrder={openOrder} orderDetails={orderDetails}
         loading={loading} saving={saving === customer.id}
         error={expanded ? error : undefined} notice={expanded ? notice : undefined}
@@ -221,7 +222,8 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
 }
 
 function CustomerRows({ customer, expanded, tone, detail, openOrder, orderDetails, loading,
-  saving, error, notice, toggleCustomer, toggleOrder, saveFollowUp }: {
+  saving, error, notice, toggleCustomer, toggleOrder, saveFollowUp, canWrite }: {
+  canWrite: boolean;
   customer: Customer; expanded: boolean; tone: number; detail?: CustomerDetail; openOrder?: string;
   orderDetails: Record<string, OrderDetail>; loading?: string; saving: boolean;
   error?: string; notice?: string; toggleCustomer: () => void;
@@ -278,7 +280,7 @@ function CustomerRows({ customer, expanded, tone, detail, openOrder, orderDetail
               <div className="customer-tags"><span>Why this customer matters</span><div>
                 {customer.tags.map(tag => <em key={tag}>{tagLabels[tag] || tag}</em>)}</div></div>
             </div>
-            <FollowUpPanel customer={customer} history={detail.follow_ups || []}
+            <FollowUpPanel canWrite={canWrite} customer={customer} history={detail.follow_ups || []}
               saving={saving} onSave={saveFollowUp} />
           </section>
         </>}
@@ -311,7 +313,8 @@ function FollowUpBadge({ customer }: { customer: Customer }) {
       Next: {formatDateTime(customer.next_follow_up_at)}</small>}
   </div>;
 }
-function FollowUpPanel({ customer, history, saving, onSave }: {
+function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
+  canWrite: boolean;
   customer: Customer; history: FollowUp[]; saving: boolean;
   onSave: (data: FormData) => Promise<boolean>;
 }) {
@@ -334,11 +337,11 @@ function FollowUpPanel({ customer, history, saving, onSave }: {
   ];
   return <section className="follow-up-panel">
     <div className="follow-up-heading">
-      <div><span>Customer conversation</span><h3>Record what happened after the call</h3>
+      <div><span>Customer conversation</span><h3>{canWrite ? "Record what happened after the call" : "Customer follow-up history"}</h3>
         <p>Structured answers help the whole team choose the right next action.</p></div>
       <FollowUpBadge customer={customer} />
     </div>
-    <form className="follow-up-form rich-follow-up-form" onSubmit={submit}>
+    {canWrite && <form className="follow-up-form rich-follow-up-form" onSubmit={submit}>
       <label><span>Call result</span><select name="status" required defaultValue="CONTACTED">
         <option value="CONTACTED">Spoke to customer</option>
         <option value="NO_ANSWER">No answer</option>
@@ -379,7 +382,7 @@ function FollowUpPanel({ customer, history, saving, onSave }: {
         maxLength={1000} placeholder="Write the important details for the next team member" /></label>
       <button className="button primary" disabled={saving}>
         {saving ? "Saving call..." : "Save call result"}</button>
-    </form>
+    </form>}
     <div className="follow-up-history">
       <strong>Previous customer conversations</strong>
       {history.length === 0 ? <p>No follow-up recorded yet.</p> :

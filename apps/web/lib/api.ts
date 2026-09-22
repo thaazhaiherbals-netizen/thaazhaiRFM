@@ -1,8 +1,10 @@
 import "server-only";
+import { requireAccess } from "./auth";
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  await requireAccess(init?.method || "GET");
   const token = process.env.ADMIN_API_TOKEN;
   if (!token) throw new Error("ADMIN_API_TOKEN is not configured for the web server");
   const response = await fetch(API_URL + path, {

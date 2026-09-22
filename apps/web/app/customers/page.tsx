@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { currentRole } from "@/lib/auth";
 import { api, Page } from "@/lib/api";
 import { Shell, Pager, Money } from "../components";
 import { saveSegmentSettings } from "../actions";
@@ -91,6 +92,7 @@ export default async function Customers({ searchParams }: {
     follow_up_status?: string; segment?: string; tag?: string; sales_signal?: string;
   }>;
 }) {
+  const canWrite = (await currentRole()) === "admin";
   const params = await searchParams;
   const search = params.search || "", offset = Number(params.offset || 0), limit = 50;
   const sort = allowedSorts.includes(params.sort || "") ? params.sort! : "last_order_date";
@@ -131,31 +133,30 @@ export default async function Customers({ searchParams }: {
         </Link>;
       })}</div>
       <details className="segment-settings">
-        <summary>See how these groups work or change the rules</summary>
-        <p>These settings are shared by the whole team. Saving them immediately
-          recalculates every customer group; no customer or order is deleted.</p>
-        <form action={saveSegmentSettings}>
-          <label><span>A customer is new for</span><input type="number"
+        <summary>{canWrite ? "See how these groups work or change the rules" : "See how these groups work"}</summary>
+        <p>These rules define the customer groups for the whole team. Only administrators can change them.</p>
+        <form action={canWrite ? saveSegmentSettings : undefined}>
+          <label><span>A customer is new for</span><input disabled={!canWrite} type="number"
             name="new_customer_days" min="1" max="89"
             defaultValue={analysis.settings.new_customer_days} /><small>days after first order</small></label>
-          <label><span>A customer stays active for</span><input type="number"
+          <label><span>A customer stays active for</span><input disabled={!canWrite} type="number"
             name="active_customer_days" min="30" max="365"
             defaultValue={analysis.settings.active_customer_days} /><small>days after last order</small></label>
-          <label><span>A best customer must buy within</span><input type="number"
+          <label><span>A best customer must buy within</span><input disabled={!canWrite} type="number"
             name="champion_recency_days" min="1" max="365"
             defaultValue={analysis.settings.champion_recency_days} /><small>days</small></label>
-          <label><span>A best customer needs at least</span><input type="number"
+          <label><span>A best customer needs at least</span><input disabled={!canWrite} type="number"
             name="champion_min_orders" min="3" max="20"
             defaultValue={analysis.settings.champion_min_orders} /><small>orders</small></label>
-          <label><span>High value means top</span><input type="number"
+          <label><span>High value means top</span><input disabled={!canWrite} type="number"
             name="high_value_percentile" min="50" max="95" step="1"
             defaultValue={Number(analysis.settings.high_value_percentile) * 100} />
             <small>percentile; now \u20B9{Number(analysis.thresholds.high_value).toLocaleString("en-IN")}</small></label>
-          <label><span>VIP value means top</span><input type="number"
+          <label><span>VIP value means top</span><input disabled={!canWrite} type="number"
             name="vip_value_percentile" min="60" max="99" step="1"
             defaultValue={Number(analysis.settings.vip_value_percentile) * 100} />
             <small>percentile; now \u20B9{Number(analysis.thresholds.vip_value).toLocaleString("en-IN")}</small></label>
-          <button className="button">Save group rules</button>
+          {canWrite && <button className="button">Save group rules</button>}
         </form>
       </details>
     </section>
@@ -192,7 +193,7 @@ export default async function Customers({ searchParams }: {
       <input type="hidden" name="direction" value={direction} />
       <button className="button">Apply</button>
     </form>
-    <CustomerTable customers={data.items} sort={sort} direction={direction}
+    <CustomerTable canWrite={canWrite} customers={data.items} sort={sort} direction={direction}
       search={search} followUpStatus={followUpStatus} segment={segment} tag={tag}
       salesSignal={salesSignal} />
     <Pager total={data.total} offset={offset} limit={limit} path="/customers"

@@ -1,6 +1,8 @@
 # Claude handoff: current state and next task
 
-Last updated: 2026-09-22.
+Last updated: 2026-09-23.
+
+Latest local change: shared team viewer access is implemented in the web app. See `docs/TEAM_ACCESS.md` for permissions, tests and rollout. The user has deployed web/API to Railway and confirmed the app opens; viewer changes still require a web deployment. No viewer migration is needed.
 
 This is the starting document for continuing the Thaazhai operations and analytics
 project in Claude Code. Read the repository `CLAUDE.md` first, then this file, then
@@ -14,7 +16,7 @@ the read-only Meta Marketing API integration in
 `docs/META_MARKETING_INTEGRATION.md`.
 
 Migration 010 is customer follow-up history, migration 011 is dynamic customer
-segmentation, and the planned Meta migration is now 012.
+segmentation, migration 012 adds sales configuration; the next new migration should use 013.
 No Meta tables, clients, sync jobs, endpoints, pages, fixtures, or real credentials
 exist yet.
 

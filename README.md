@@ -164,3 +164,7 @@ three-month and daily month views for revenue, customers and product sales. Cust
 have dynamic opportunity buckets, value/lifecycle/product tags and contact history. Meta spend,
 impressions, clicks and attributed conversions are not yet present. See the Meta handoff
 above before starting Phase 6.
+
+## Team view-only access
+
+See [Team access](docs/TEAM_ACCESS.md) for viewer permissions, Railway setup, session revocation and verification.

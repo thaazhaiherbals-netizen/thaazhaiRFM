@@ -1,18 +1,16 @@
-import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-
+import { accessStatus, SESSION_COOKIE, sessionRole } from "./lib/session";
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  if (path.startsWith("/login") || path.startsWith("/api/login") || path.startsWith("/_next") || path === "/favicon.ico") {
-    return NextResponse.next();
+  if (path === "/login" || path === "/api/login" || path === "/favicon.ico") return NextResponse.next();
+  const role = sessionRole(request.cookies.get(SESSION_COOKIE)?.value);
+  if (!role) {
+    if (path.startsWith("/api/")) return NextResponse.json({ detail: "Please sign in" }, { status: 401 });
+    return NextResponse.redirect(new URL("/login", process.env.APP_URL || request.url));
   }
-  const secret = process.env.ADMIN_UI_SESSION || "";
-  const expected = createHash("sha256").update(secret).digest("hex");
-  const supplied = request.cookies.get("thaazhai_admin")?.value || "";
-  const valid = secret && supplied.length === expected.length &&
-    timingSafeEqual(Buffer.from(supplied), Buffer.from(expected));
-  if (!valid) return NextResponse.redirect(new URL("/login", request.url));
+  // Server Actions enforce access in the data layer; logout remains available to viewers.
+  if (path.startsWith("/api/") && accessStatus(role, request.method) === 403)
+    return NextResponse.json({ detail: "Viewer access is read-only" }, { status: 403 });
   return NextResponse.next();
 }
-
 export const config = { matcher: ["/((?!_next/static|_next/image).*)"] };

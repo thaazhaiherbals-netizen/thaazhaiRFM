@@ -1,3 +1,4 @@
+import { currentRole } from "@/lib/auth";
 import { api, Page } from "@/lib/api";
 import { Shell, Money } from "../components";
 import { saveMapping, startJob } from "../actions";
@@ -11,6 +12,7 @@ const allowedSorts = ["affected_orders", "affected_items", "item_revenue", "prod
 export default async function Mappings({ searchParams }: {
   searchParams: Promise<{ sort?: string; direction?: string }>;
 }) {
+  const canWrite = (await currentRole()) === "admin";
   const params = await searchParams;
   const sort = allowedSorts.includes(params.sort || "") ? params.sort! : "affected_orders";
   const direction = params.direction === "asc" ? "asc" : "desc";
@@ -21,8 +23,8 @@ export default async function Mappings({ searchParams }: {
   return <Shell title="Product mappings">
     <div className="panel-heading"><div><h2>Needs mapping</h2>
       <p>Save the confirmed catalogue match; affected orders are then resolved in the background.</p></div>
-      <form action={startJob}><input type="hidden" name="kind" value="mappings" />
-        <button className="button">Resolve all again</button></form></div>
+      {canWrite && <form action={startJob}><input type="hidden" name="kind" value="mappings" />
+        <button className="button">Resolve all again</button></form>}</div>
     <form className="sort-controls">
       <label>Sort by <select name="sort" defaultValue={sort}>
         <option value="affected_orders">Affected orders</option>
@@ -37,19 +39,21 @@ export default async function Mappings({ searchParams }: {
     </form>
     {missing.total === 0 ? <div className="empty">All order items are mapped.</div> :
       <div className="mapping-grid">{missing.items.map((row, index) =>
-        <form action={saveMapping} className="panel mapping-card" key={index}>
-          <input type="hidden" name="source_system" value={row.source_system} />
-          <input type="hidden" name="alias_name" value={row.raw_product_name} />
-          <input type="hidden" name="alias_variant" value={row.raw_variant_name || ""} />
+        <div className="panel mapping-card" key={index}>
+
           <div><h3>{row.raw_product_name}</h3><p>{row.raw_variant_name || "No variant"} -{" "}
             {row.affected_orders} orders - <Money value={row.item_revenue} /></p>
             <small>{row.mapping_error}</small></div>
+          {canWrite && <form action={saveMapping}>
+          <input type="hidden" name="source_system" value={row.source_system} />
+          <input type="hidden" name="alias_name" value={row.raw_product_name} />
+          <input type="hidden" name="alias_variant" value={row.raw_variant_name || ""} />
           <select name="catalogue" required defaultValue=""><option value="" disabled>Select product and variant</option>
             {products.items.map(p => <option key={p.variant_id || p.product_id}
               value={p.product_id + "|" + (p.variant_id || "")}>
               {p.canonical_name}{p.variant_name ? " - " + p.variant_name : ""}
             </option>)}</select>
           <button className="button primary">Save mapping</button>
-        </form>)}</div>}
+        </form>}</div>)}</div>}
   </Shell>;
 }

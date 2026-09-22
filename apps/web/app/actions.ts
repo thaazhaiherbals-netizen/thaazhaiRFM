@@ -4,13 +4,17 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { api } from "@/lib/api";
+import { SESSION_COOKIE } from "@/lib/session";
+import { requireAccess } from "@/lib/auth";
 
 export async function logout() {
+  (await cookies()).delete(SESSION_COOKIE);
   (await cookies()).delete("thaazhai_admin");
   redirect("/login");
 }
 
 export async function startJob(formData: FormData) {
+  await requireAccess("POST");
   const kind = String(formData.get("kind"));
   const routes: Record<string, string> = {
     pending: "/admin/jobs/process-pending",
@@ -25,6 +29,7 @@ export async function startJob(formData: FormData) {
 }
 
 export async function retryOrder(formData: FormData) {
+  await requireAccess("POST");
   const id = String(formData.get("id"));
   await api(`/admin/ingestion/${id}/retry`, { method: "POST" });
   revalidatePath("/ingestion");
@@ -32,6 +37,7 @@ export async function retryOrder(formData: FormData) {
 }
 
 export async function correctDate(formData: FormData) {
+  await requireAccess("POST");
   const id = String(formData.get("id"));
   await api(`/admin/ingestion/${id}/order-date`, {
     method: "PUT",
@@ -45,6 +51,7 @@ export async function correctDate(formData: FormData) {
 }
 
 export async function saveMapping(formData: FormData) {
+  await requireAccess("POST");
   const [product_id, variant_id] = String(formData.get("catalogue")).split("|");
   await api("/admin/product-aliases", {
     method: "POST",
@@ -62,6 +69,7 @@ export async function saveMapping(formData: FormData) {
 }
 
 export async function saveSegmentSettings(formData: FormData) {
+  await requireAccess("POST");
   await api("/admin/customer-segment-settings", {
     method: "PUT",
     body: JSON.stringify({

@@ -1,3 +1,4 @@
+import { currentRole } from "@/lib/auth";
 import { api, Page } from "@/lib/api";
 import { Icon, Pager, Shell, SortLink, Status } from "../components";
 import { correctDate, retryOrder, startJob } from "../actions";
@@ -13,6 +14,7 @@ const allowedSorts = ["ingested_at", "processed_at", "retry_count", "status", "s
 export default async function Ingestion({ searchParams }: {
   searchParams: Promise<{ status?: string; offset?: string; sort?: string; direction?: string }>;
 }) {
+  const canWrite = (await currentRole()) === "admin";
   const params = await searchParams, offset = Number(params.offset || 0), limit = 50;
   const status = params.status || "";
   const sort = allowedSorts.includes(params.sort || "") ? params.sort! : "ingested_at";
@@ -36,12 +38,12 @@ export default async function Ingestion({ searchParams }: {
         <div><span className="section-kicker">Processing command centre</span>
           <h2>Order ingestion pipeline</h2>
           <p>Convert pending raw records into analytics-ready customers, orders and products.</p></div>
-        <div className="actions">
+        {canWrite && <div className="actions">
           <form action={startJob}><input type="hidden" name="kind" value="pending" />
             <button className="button primary"><Icon name="jobs" size={17} />Process pending</button></form>
           <form action={startJob}><input type="hidden" name="kind" value="errors" />
             <button className="button"><Icon name="repeat" size={17} />Retry errors</button></form>
-        </div>
+        </div>}
       </div>
       <div className="status-grid pipeline-status">
         <div><span className="status-dot pending" /><strong>{summary.NEW}</strong><span>Pending</span></div>
@@ -69,12 +71,12 @@ export default async function Ingestion({ searchParams }: {
         <td>{row.source_system}</td><td><Status value={row.status} /></td>
         <td>{new Date(row.ingested_at).toLocaleDateString("en-IN")}</td><td>{row.retry_count}</td>
         <td>{row.error_message ? <div className="issue"><span>{row.error_message}</span>
-          {row.error_message.includes("order_date") ?
+          {canWrite && (row.error_message.includes("order_date") ?
             <form action={correctDate} className="inline-form"><input type="hidden" name="id" value={row.id} />
               <input type="date" name="order_date" required /><input name="reason" minLength={5}
                 placeholder="Source used to confirm date" required /><button className="button small">Correct &amp; retry</button></form>
             : <form action={retryOrder}><input type="hidden" name="id" value={row.id} />
-                <button className="button small">Retry</button></form>}</div> : "-"}</td></tr>)}</tbody>
+                <button className="button small">Retry</button></form>)}</div> : "-"}</td></tr>)}</tbody>
     </table></section>
     <Pager total={data.total} offset={offset} limit={limit} path="/ingestion" query={query.toString()} />
   </Shell>;
