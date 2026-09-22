@@ -1,0 +1,51 @@
+name: thaazhai-local
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${LOCAL_DB_USER:?Use --env-file .env.local}
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:?Use --env-file .env.local}
+      POSTGRES_DB: ${LOCAL_DB_NAME:?Use --env-file .env.local}
+    ports:
+      - "127.0.0.1:${LOCAL_DB_PORT:-5433}:5432"
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://${LOCAL_DB_USER}:${LOCAL_DB_PASSWORD}@postgres:5432/${LOCAL_DB_NAME}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?Set ADMIN_API_TOKEN in .env.local}
+      CORS_ORIGINS: '["http://localhost:3000"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./db:/app/db
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    command: ["python", "-m", "workers.order_processor"]
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://${LOCAL_DB_USER}:${LOCAL_DB_PASSWORD}@postgres:5432/${LOCAL_DB_NAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./workers:/app/workers
+    restart: unless-stopped
+volumes:
+  local_postgres_data:

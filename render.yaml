@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: thaazhai-api
+    runtime: python
+    plan: free
+    autoDeploy: false
+    buildCommand: pip install -r requirements.lock.txt
+    startCommand: uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_API_TOKEN
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+  - type: web
+    name: thaazhai-web
+    runtime: node
+    plan: free
+    autoDeploy: false
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start -- --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NEXT_PUBLIC_APP_ENV
+        value: production
+      - key: API_URL
+        sync: false
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: ADMIN_API_TOKEN
+        sync: false
+      - key: ADMIN_UI_SESSION
+        sync: false
+
+  - type: worker
+    name: thaazhai-order-processor
+    runtime: python
+    buildCommand: pip install -r requirements.lock.txt
+    startCommand: python -m workers.order_processor
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
