@@ -538,3 +538,6 @@ code { background: #edf0e9; padding: 2px 5px; border-radius: 4px; }
 .viewer-banner strong { margin-right: 12px; color: #f6d994; }
 .segment-settings input:disabled { opacity: 1; color: #24483e; background: #edf2ee; cursor: default; }
 .mapping-card > form { display: grid; gap: 12px; }
+
+.viewer-form-notice { padding: 12px 16px; border-left: 4px solid #bc8b29; background: #fff7e5; color: #66480c; border-radius: 6px; }
+.follow-up-form .button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }

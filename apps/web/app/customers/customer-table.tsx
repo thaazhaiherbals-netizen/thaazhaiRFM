@@ -320,6 +320,7 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
 }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canWrite || saving) return;
     const form = event.currentTarget;
     if (await onSave(new FormData(form))) form.reset();
   }
@@ -337,11 +338,12 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
   ];
   return <section className="follow-up-panel">
     <div className="follow-up-heading">
-      <div><span>Customer conversation</span><h3>{canWrite ? "Record what happened after the call" : "Customer follow-up history"}</h3>
+      <div><span>Customer conversation</span><h3>{canWrite ? "Record what happened after the call" : "Explore the follow-up form"}</h3>
         <p>Structured answers help the whole team choose the right next action.</p></div>
       <FollowUpBadge customer={customer} />
     </div>
-    {canWrite && <form className="follow-up-form rich-follow-up-form" onSubmit={submit}>
+    {!canWrite && <p className="viewer-form-notice">View-only preview: you can try the fields below to learn how follow-ups work. Nothing you enter here will be saved.</p>}
+    <form className="follow-up-form rich-follow-up-form" onSubmit={submit}>
       <label><span>Call result</span><select name="status" required defaultValue="CONTACTED">
         <option value="CONTACTED">Spoke to customer</option>
         <option value="NO_ANSWER">No answer</option>
@@ -380,9 +382,10 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
       </fieldset>
       <label className="follow-up-notes"><span>Call notes or full concern</span><textarea name="notes"
         maxLength={1000} placeholder="Write the important details for the next team member" /></label>
-      <button className="button primary" disabled={saving}>
-        {saving ? "Saving call..." : "Save call result"}</button>
-    </form>}
+      <button className="button primary" disabled={!canWrite || saving}
+        title={!canWrite ? "Only administrators can save call results" : undefined}>
+        {!canWrite ? "Save call result (view only)" : saving ? "Saving call..." : "Save call result"}</button>
+    </form>
     <div className="follow-up-history">
       <strong>Previous customer conversations</strong>
       {history.length === 0 ? <p>No follow-up recorded yet.</p> :

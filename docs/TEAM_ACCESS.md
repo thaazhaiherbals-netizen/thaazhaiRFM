@@ -10,7 +10,7 @@ The web app supports two access codes on the same login page:
 3. Keep existing `ADMIN_UI_SESSION`, `ADMIN_API_TOKEN`, `API_URL` and `APP_URL`. APP_URL is the public HTTPS web address.
 4. Commit/push the code and deploy the web service. No database migration, seed, API or worker changes are needed.
 5. Existing sessions must sign in again after this upgrade. Check admin login, then use a private browser window to sign in with the viewer code.
-6. Confirm reports/search/filters/order drill-down and follow-up history work. Viewers see a banner and no write controls.
+6. Confirm reports/search/filters/order drill-down and follow-up history work. Viewers see a banner. The customer follow-up form remains visible for learning: fields can be tried, but Save is disabled, submission is blocked, and nothing is stored. Other write controls remain hidden.
 7. Share only the web URL and viewer code with the team. Do not share the admin code.
 
 ## Enforcement and limitations
