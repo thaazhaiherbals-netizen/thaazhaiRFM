@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "account_id": "1111111111",
+      "account_currency": "INR",
+      "campaign_id": "2002",
+      "campaign_name": "Synthetic Retargeting",
+      "objective": "OUTCOME_SALES",
+      "adset_id": "3002",
+      "adset_name": "Site visitors 30d",
+      "ad_id": "4003",
+      "ad_name": "Combo Carousel",
+      "spend": "500",
+      "impressions": "10000",
+      "reach": "6000",
+      "clicks": "300",
+      "inline_link_clicks": "200",
+      "actions": [
+        {"action_type": "link_click", "value": "200"},
+        {"action_type": "purchase", "value": "5"},
+        {"action_type": "lead", "value": "2"}
+      ],
+      "action_values": [{"action_type": "purchase", "value": "3000"}],
+      "date_start": "2026-09-02",
+      "date_stop": "2026-09-02"
+    }
+  ],
+  "paging": {"cursors": {"before": "BEFORE2", "after": "AFTER2"}}
+}

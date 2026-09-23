@@ -2,182 +2,144 @@
 
 Last updated: 2026-09-23.
 
-Latest local change: shared team viewer access is implemented in the web app. See `docs/TEAM_ACCESS.md` for permissions, tests and rollout. The user has deployed web/API to Railway and confirmed the app opens; viewer changes still require a web deployment. No viewer migration is needed.
+Start every session here. Read the repository `CLAUDE.md` first, then this file, then
+the doc for the area you are touching. Treat numbers below as a recorded baseline, not
+as facts that automatically remain true: re-check before relying on them.
 
-This is the starting document for continuing the Thaazhai operations and analytics
-project in Claude Code. Read the repository `CLAUDE.md` first, then this file, then
-`docs/META_MARKETING_INTEGRATION.md`.
+## Repository workflow and branch separation
 
-## Mission for the next work session
+The earlier shared checkout contained mixed, uncommitted support and Meta work.
+That checkout and its original staging state are preserved for recovery. Do not
+continue feature development in it.
 
-The immediate release adds customer follow-up tracking and deploys the current analytics
-application to Render. After that release is verified, the next planned development is
-the read-only Meta Marketing API integration in
-`docs/META_MARKETING_INTEGRATION.md`.
+Independent feature worktrees were prepared from origin/main (1d42671):
+- feature/meta-marketing-integration: Meta client/parser/sync, reporting UI,
+  scheduler, schema and operating documentation. This branch contains Meta only.
+- codex/customer-support-access: web support role, permissions and tests.
+- codex/intelligence-vision: future vision and Git workflow documentation.
 
-Migration 010 is customer follow-up history, migration 011 is dynamic customer
-segmentation, migration 012 adds sales configuration; the next new migration should use 013.
-No Meta tables, clients, sync jobs, endpoints, pages, fixtures, or real credentials
-exist yet.
+The current support-only shared-file change is in components.tsx. actions.ts and
+globals.css contain Meta-only additions. main remains unchanged; these branches
+require review and integration before deployment. See Git history for commit status.
 
-## What is already implemented
+New work must start in an isolated worktree from updated origin/main. A feature
+that depends on unmerged Meta work may explicitly stack on its committed tip;
+record that base and review only the dependent diff. Never carry a dirty tree
+between branches, or use git add -A on the original mixed checkout.
 
-- Local PostgreSQL 17 through Docker Compose.
-- FastAPI backend under `apps/api`.
-- PostgreSQL-backed order worker under `workers/order_processor`.
-- Next.js App Router admin UI under `apps/web`.
-- Raw-order import from Supabase into isolated local PostgreSQL.
-- Transactional order normalization and customer/order/item creation.
-- Product alias matching that preserves sales with `PENDING` unmapped items.
-- Delivery location fields with provenance while preserving source JSON.
-- Processing jobs, retries, mapping resolution and audited order-date correction.
-- Protected Ingestion, Jobs, Product Mappings, Orders and Customers pages.
-- Customer order-history expansion and order drill-down.
-- Sorting/searching on operational lists.
-- Shared append-only customer follow-up outcomes, notes, ownership and next-contact time.
-- Dynamic D2C sales buckets with lifecycle, value and product-affinity tags.
-- CEO sales dashboard with yearly, rolling three-month and selected-month daily views
-  for revenue, orders, products and new customers.
+## What is implemented
 
-## Current local data and validation baseline
+Operations and sales (committed on `main`):
 
-- 1,419 raw records in the imported snapshot: 1,418 processed and one error.
-- The remaining error is source record `2443`, which has no `order_date` in its raw
-  payload. Do not invent a date. No correction has been saved for it.
-- Latest recorded verification: 73 backend tests passed, plus Python lint, TypeScript
-  checking and Next.js production build.
-- Migrations 001 through 011 exist. Migration 010 adds `customer_follow_ups`;
-  migration 011 adds dynamic customer analysis. The next planned schema file is
-  `012_meta_marketing.sql`; never edit an applied migration.
-- No Meta API call or production database change has been made.
+- Local PostgreSQL 17 through Docker Compose; FastAPI (`apps/api`); Next.js admin UI
+  (`apps/web`); PostgreSQL-backed order worker (`workers/order_processor`).
+- Raw-order import, transactional normalization, product alias matching that keeps
+  `PENDING` unmapped items, delivery location with provenance, processing jobs,
+  retries, mapping resolution, audited order-date correction.
+- Ingestion, Jobs, Mappings, Orders, Customers pages; customer follow-up history
+  (migration 010); dynamic customer buckets (011) with configurable thresholds (012).
+- CEO sales dashboard (yearly, rolling three-month, daily month views).
+- Read-only team viewer role (`VIEWER_UI_TOKEN`); see `docs/TEAM_ACCESS.md`.
 
-Update `docs/VALIDATION.md` with new evidence as work is completed. Treat the values
-above as a recorded baseline, not as assertions that automatically remain current.
+Separate feature branches (see above): customer-support role; Meta marketing.
 
-## Environment boundaries
+### Meta marketing (live locally, not in production)
 
-Local development uses `.env.local` and Docker PostgreSQL. Production uses Render
-environment variables and Supabase PostgreSQL with `APP_ENV=production`.
+Full operating guide: [META_MARKETING_INTEGRATION.md](META_MARKETING_INTEGRATION.md).
 
-The local raw-order data is an explicitly imported snapshot. It does not synchronize
-automatically with Supabase. Normal development, migration and test commands must not
-target Supabase. Never run all migrations or seeds blindly against production.
+- Migration `013_meta_marketing.sql` (seven RLS-restricted tables). Applied to the local
+  Docker database only. **Not applied to Supabase.** Next new migration: **014**.
+- Read-only Graph API client, pure parser, idempotent sync, CLI backfill, reporting
+  API under `/admin/marketing/*`, `/marketing` page with campaign drill-down, and a
+  separate daily scheduler (`workers/meta_sync`, compose service `meta-scheduler`).
+- Live local data: the account "Thaazhai New Ad account" (INR, Asia/Kolkata),
+  2026-03-01 to 2026-09-22 backfilled; first spend on 2026-04-11; 21 campaigns;
+  every run's ad-level spend equals Meta's account-level control total (difference
+  0.00). The scheduler syncs the previous 7 days each morning after 06:00 IST.
 
-Meta secrets must remain server-side. Never place the access token in Git, a database
-row, logs, HTML, browser requests, screenshots, fixtures, or a `NEXT_PUBLIC_*` value.
-The example env files contain blank reserved Meta variable names only.
+## Current validation baseline
 
-## Work that can start without Meta credentials
+- Backend: 126 tests passed in Linux Python 3.12 against a freshly created disposable
+  `thaazhai_check` database. Ruff, `npm run typecheck`, `npm run build` passed.
+- Local data: 1,419 raw order records, 1,418 processed, one error (source record
+  `2443`, no `order_date` in the raw payload; do not invent a date).
+- Evidence and details: [VALIDATION.md](VALIDATION.md).
 
-Do not block local implementation while waiting for a live token. Claude can build and
-validate these parts entirely with redacted fixtures:
+## Next work, in priority order
 
-1. Typed optional Meta settings and configuration tests.
-2. Migration 012 and disposable-database migration tests.
-3. Pure parsers for money, counts, actions and action values.
-4. HTTP client behavior using mocked responses: pagination, retries, async reports and
-   sanitized errors.
-5. Idempotent raw landing and normalized upsert logic.
-6. Manual sync CLI, authenticated endpoints and absent-configuration 503 behavior.
-7. Marketing UI loading, empty, error, freshness and drill-down states.
+1. **Separate and commit** the two uncommitted features (above). Owner decides when to
+   commit and push.
+2. **Ads Manager spot check** for Meta: pick one or two dates, set Ads Manager to the
+   same dates and "7-day click, 1-day view", and compare spend, impressions, link
+   clicks, purchases and purchase value with `/marketing`. Record differences in
+   `docs/VALIDATION.md`. Spend already reconciles against the API control total.
+3. **Review unclassified Meta actions** with the owner (messaging conversations,
+   custom conversions such as `offsite_*_add_20_s_calls`, `onsite_web_*`). Promote
+   only confirmed ones to columns via a new migration; keep the priority-list rule
+   (never sum overlapping action types).
+4. **Production rollout of Meta** (only after steps 1-2): compare Supabase
+   `schema_migrations` with the repo, apply only migration 013; add `META_*` variables
+   to the API service; add a separate always-on service running
+   `python -m workers.meta_sync` with the same `META_*` and `DATABASE_URL`
+   (direct/session connection); run a bounded backfill from the CLI; confirm the
+   dashboard. Hosting is Railway (earlier docs say Render; the commands are the same).
+5. **Zoho integration** (expenses and stock analytics), Phase 6 in
+   [GROWTH_PLATFORM.md](GROWTH_PLATFORM.md). Not designed in detail yet: write a
+   contract doc like `META_MARKETING_INTEGRATION.md` first (owner inputs, API scopes,
+   tables, sync, metrics, tests), then follow the same slice order: settings,
+   migration, fixture-tested client/parser, idempotent sync, API, UI, live check.
 
-A real account is required only for saving a redacted representative response,
-confirming action names, running a small-range reconciliation, enabling a production
-schedule and performing the historical backfill.
+## Environment boundaries (unchanged, critical)
 
-## Information to request from the owner before live connection
+- Local: root `.env.local` + Docker PostgreSQL. Production: host variables + Supabase,
+  `APP_ENV=production`. The local order data is an imported snapshot, not synced.
+- Never point local commands or tests at Supabase. Never rerun all migrations/seeds
+  against production; compare migration history first.
+- Secrets stay server-side. Never put `ADMIN_API_TOKEN`, `META_ACCESS_TOKEN` or any
+  token in Git, database rows, logs, HTML, fixtures, chat, or `NEXT_PUBLIC_*` values.
+  The owner pastes tokens directly into `.env.local` or the host's variables.
 
-1. Meta Business ID and ad account ID.
-2. Account currency and timezone from Ads Manager.
-3. Read-only app/system-user token authorized for the account with `ads_read`.
-4. Earliest history date to import.
-5. Attribution windows.
-6. Real action types for purchase, checkout, add-to-cart and lead.
-7. Whether business revenue remains gross `orders.order_value`.
-8. Desired daily sync time and owner for token failures.
+## Data rules that must survive every change
 
-Ask for secrets only when the live reconciliation step is ready. The owner should put
-the token directly in `.env.local` or Render; do not ask them to paste it into source,
-documentation or a chat response.
-
-## Required implementation order
-
-1. Read `CLAUDE.md`, this handoff, `docs/DATA_MODEL.md`, `docs/ENVIRONMENTS.md`,
-   `docs/VALIDATION.md` and `docs/META_MARKETING_INTEGRATION.md`.
-2. Inspect existing code and tests; do not assume the documents replace the code.
-3. Add optional settings and fixture-based tests. Existing application startup must
-   continue to work when every Meta value is blank.
-4. Add migration 012 and prove repeatability against a disposable database ending in
-   `_check`.
-5. Build the pure parser and mocked client before making a live request.
-6. Build raw landing, normalized facts, idempotent reruns and manual CLI.
-7. Add authenticated API reporting and sync-status endpoints.
-8. Add the Marketing page using the established dashboard visual language.
-9. Reconcile a small date range with Ads Manager using identical dates, timezone,
-   attribution and filters.
-10. Only after reconciliation, add the production cron and bounded historical backfill.
-
-Complete each independent step and its tests before moving to the next. Do not deploy,
-schedule or backfill the live account merely because fixture tests pass.
-
-## Data rules that must survive the change
-
-- Compute sales revenue/AOV/order counts from `orders`, avoiding order-item fanout.
-- Keep unmapped items and unknown locations in analytics with explicit fallback buckets.
-- Join Meta dimensions by stable IDs; names are mutable labels.
-- Store money as PostgreSQL `NUMERIC` and Python `Decimal`, not floating point.
-- Canonical Meta fact grain is one ad, one reporting date and one attribution
-  configuration. Do not sum responses from multiple reporting levels.
-- Keep Meta-attributed conversions distinct from observed business orders.
-- Do not claim campaign-level sales attribution until reliable order-side UTM/click IDs
-  and an attribution model exist.
-- Preserve full action arrays/raw payloads so new action types are not discarded.
-- Re-fetch a configurable recent lookback because Meta can restate conversions.
-- The existing order worker is not the Meta scheduler.
+- Revenue/AOV/order counts come from `orders`, never an order-item fan-out join.
+- Keep unmapped items and unknown locations in analytics as explicit buckets.
+- Money is PostgreSQL `NUMERIC` / Python `Decimal`; ratios are computed from summed
+  parts and rounded half-up.
+- Meta fact grain: one ad x one reporting date x one attribution configuration.
+  Never add campaign/account-level rows to the same fact. Daily reach is not additive.
+- Meta-attributed conversions are not business orders. No campaign-level revenue
+  attribution until orders carry reliable UTM/click IDs.
+- Join Meta dimensions by ID; names are mutable. Raw Meta payloads are append-only.
+- The order worker is not the Meta scheduler.
 
 ## Validation commands
 
-From the repository root:
-
 ```powershell
 docker compose --env-file .env.local up -d --build
-docker compose --env-file .env.local exec api python -m db.migrate --seed
+docker compose --env-file .env.local exec api python -m db.migrate
+.\.venv\Scripts\python -m ruff check apps/api db tests workers
+.\.venv\Scripts\python -m pytest tests/test_config.py tests/test_health.py tests/test_meta_parser.py tests/test_meta_client.py tests/test_meta_schedule.py tests/test_marketing_api.py
+cd apps/web; npm run typecheck; npm run build
 ```
 
-Run Python checks using the documented Docker/disposable-database path when native
-Windows `psycopg` is blocked:
+Database-backed tests (native `psycopg` is blocked on this Windows machine, so run them
+in Docker). Recreate the disposable database first; fixtures truncate at test start
+only, so a reused `_check` database fails `test_database`:
 
-```powershell
-.\.venv\Scripts\python -m pytest tests/test_config.py tests/test_health.py
-.\.venv\Scripts\python -m ruff check apps/api db tests
-cd apps/web
-npm run typecheck
-npm run build
+```bash
+set -a; . ./.env.local; set +a
+docker compose --env-file .env.local exec -T postgres psql -U "$LOCAL_DB_USER" -d "$LOCAL_DB_NAME" -c "DROP DATABASE IF EXISTS thaazhai_check WITH (FORCE)" -c "CREATE DATABASE thaazhai_check"
+MSYS_NO_PATHCONV=1 docker compose --env-file .env.local run --rm -T -v "$(pwd -W)/tests:/app/tests" -v "$(pwd -W)/pyproject.toml:/app/pyproject.toml" -v "$(pwd -W)/apps/api:/app/apps/api" -v "$(pwd -W)/workers:/app/workers" -e APP_ENV=test -e RUN_DATABASE_TESTS=1 -e ADMIN_API_TOKEN= -e META_AD_ACCOUNT_ID= -e META_ACCESS_TOKEN= -e META_GRAPH_API_VERSION= -e META_ATTRIBUTION_WINDOWS= -e DATABASE_URL="postgresql://$LOCAL_DB_USER:$LOCAL_DB_PASSWORD@postgres:5432/thaazhai_check" api python -m pytest tests -q -p no:cacheprovider
 ```
 
-Database-backed tests must opt in with `RUN_DATABASE_TESTS=1` and point only to a
-disposable local database whose name ends in `_check`.
-
-## Repository state warning
-
-At the time of this handoff, `git status` showed most implementation files as untracked
-and only `README.md` as modified. Do not assume the GitHub repository contains the
-current local application. Inspect `.gitignore`, review all files for secrets, and have
-the owner explicitly decide when to stage, commit and push the complete baseline.
-
-## Completion evidence
-
-The Meta task is complete only when all acceptance criteria in
-`docs/META_MARKETING_INTEGRATION.md` pass. Record exact test results, migration results,
-the reconciled account/date range without secrets, metric differences, and deployment
-status in `docs/VALIDATION.md`. Change planning language in README and other docs only
-after the corresponding feature actually works.
+The blank `META_*`/`ADMIN_API_TOKEN` overrides stop real local secrets leaking into
+tests. Tests use redacted fixtures and never call Meta.
 
 ## Prompt to start Claude
 
-Continue the Thaazhai project from `docs/CLAUDE_HANDOFF.md`. Implement the read-only
-Meta Marketing API work in `docs/META_MARKETING_INTEGRATION.md` in the required order.
-Start with credential-independent configuration, migration and fixture-tested parsing.
-Preserve all documented data and security invariants, run the appropriate checks after
-each slice, and update `docs/VALIDATION.md` with evidence. Ask me for the eight live
-account inputs only when they are needed for real-account reconciliation.
+Continue the Thaazhai project from `docs/CLAUDE_HANDOFF.md`. First confirm the
+repository state described there and help me separate and commit the uncommitted
+customer-support and Meta marketing work onto their own branches. Then continue with
+the next item in "Next work, in priority order". Start every feature on a new branch,
+preserve the environment boundaries and data rules, run the validation commands after
+each slice, and record evidence in `docs/VALIDATION.md`.

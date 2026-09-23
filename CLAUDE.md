@@ -4,8 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Current continuation point:** read
 [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) before changing code. It records the
-implemented baseline, local-data state, next Meta Marketing API task, safe work that can
-start without credentials, and the exact handoff prompt.
+repository/branch state (uncommitted work to separate first), the implemented baseline,
+the prioritized next work and a copyable start prompt.
+
+**Branching rule:** every upgrade starts on a new feature branch from an up-to-date
+`main`. Never commit feature work directly to `main`.
 
 ## What this is
 
@@ -26,11 +29,13 @@ project has a lot of load-bearing decisions documented there. In particular:
 - [docs/CUSTOMER_SEGMENTATION.md](docs/CUSTOMER_SEGMENTATION.md) - dynamic D2C buckets, tags and sales actions.
 - [docs/GROWTH_PLATFORM.md](docs/GROWTH_PLATFORM.md) — planning-only doc for Phases 6-10
   (Meta/Zoho financial truth, Shopify cart funnel, RFM segmentation, WhatsApp retention
-  actions, AI prompt layer). Nothing in it is built yet; check it before assuming scope
-  for any ads/expenses/WhatsApp/AI-related work.
+  actions, AI prompt layer). Only the Meta Ads part of Phase 6 is built; check it before
+  assuming scope for any ads/expenses/WhatsApp/AI-related work (Zoho is next).
 
-- [docs/META_MARKETING_INTEGRATION.md](docs/META_MARKETING_INTEGRATION.md) - implementation
-  contract for the next read-only Meta Ads metrics job. It is designed, not implemented.
+- [docs/META_MARKETING_INTEGRATION.md](docs/META_MARKETING_INTEGRATION.md) - operating
+  guide (sync, scheduler, settings, token setup, troubleshooting) and design contract
+  for the implemented read-only Meta Ads reporting.
+- [docs/TEAM_ACCESS.md](docs/TEAM_ACCESS.md) - admin / viewer / support login roles.
 - [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) - current continuation state and
   required order for the next work session.
 
@@ -68,7 +73,7 @@ docker compose --env-file .env.local exec api python -m db.migrate --seed
 
 ### Run the app
 ```powershell
-docker compose --env-file .env.local up -d --build   # postgres + api (+ worker)
+docker compose --env-file .env.local up -d --build   # postgres + api + worker + meta-scheduler
 cd apps/web && npm ci && npm run dev                  # frontend, separate terminal
 ```
 Web: http://localhost:3000 · API docs: http://localhost:8000/docs ·
@@ -165,6 +170,21 @@ accepts `ERROR` records, requires a `reason` (min 5 chars), upserts into
 and re-queues that one record via `enqueue_job(..., "RETRY_ONE", ...)` — it never
 edits `raw_payload` or writes the order directly.
 
+### Meta marketing (read-only Meta Ads; docs/META_MARKETING_INTEGRATION.md)
+```powershell
+docker compose --env-file .env.local exec api python -m db.import_meta_insights --recent
+docker compose --env-file .env.local exec api python -m db.import_meta_insights --from 2026-03-01 --to 2026-09-22 --async
+docker compose --env-file .env.local restart meta-scheduler   # after worker-code changes
+```
+Flow: Meta Graph API -> sync (`apps/api/integrations/meta/sync.py`: advisory lock,
+append-only `raw_meta_insights`, then delete+rebuild `meta_ad_daily_performance` for the
+run's dates in one transaction) -> `/admin/marketing/*` (`apps/api/marketing.py`) ->
+`/marketing`. The dashboard never calls Meta. Re-syncing dates replaces facts (no
+double counting). The daily scheduler is `workers/meta_sync` (compose service
+`meta-scheduler`), separate from the order worker. Settings are the optional `META_*`
+values in `apps/api/config.py`; blank means sync endpoints return 503. Action types
+are mapped by first-present priority lists in `parser.py` — never sum overlapping types.
+
 ### Two separate admin credentials — do not conflate them
 - **Backend**: `ADMIN_API_TOKEN`, checked by `apps/api/auth.py:require_admin` via
   `HTTPBearer` on every `/admin/*`, `/orders*`, `/customers*` route. Fails closed
@@ -178,6 +198,11 @@ edits `raw_payload` or writes the order directly.
   call the FastAPI backend; the browser never sees it. Both `ADMIN_API_TOKEN` and
   `ADMIN_UI_SESSION` must be set for login to work locally — check
   `apps/web/.env.local` if login 503s.
+- **Web roles** (`apps/web/lib/session.ts`, `docs/TEAM_ACCESS.md`): the login form
+  also accepts `VIEWER_UI_TOKEN` (read-only everywhere) and `SUPPORT_UI_TOKEN`
+  (customers/orders/follow-ups only). The signed session cookie is `thaazhai_session`;
+  `accessStatus()` is the single allow-list — extend it for any new page or route.
+  The backend still only knows `ADMIN_API_TOKEN`; roles are enforced in the web layer.
 
 ### Job queue (Phase 3 — docs/PROCESSING_JOBS.md)
 No Redis/broker: `processing_jobs` + `processing_job_items` (migration 008) *are*
@@ -210,9 +235,7 @@ edits won't be picked up live.
 `apps/web` is a Next.js App Router admin application, cookie-session-gated (see
 auth split above). Implemented pages: `/` (dashboard + `dashboard-charts.tsx`
 analytics), `/ingestion`, `/jobs`, `/mappings`, `/orders` + `/orders/[id]`,
-`/customers` + `/customers/[id]`, `/login`. There is no `/marketing` page yet —
-that's the deliverable of the (unimplemented) Meta integration; check
-`docs/META_MARKETING_INTEGRATION.md` and `docs/CLAUDE_HANDOFF.md` before adding one.
+`/customers` + `/customers/[id]`, `/marketing` + `/marketing/campaigns/[id]`, `/login`.
 `apps/web/AGENTS.md` (auto-generated by `next dev`, keep it if it reappears)
 warns this Next.js version has breaking API/convention changes from training
 data — read `node_modules/next/dist/docs/` before writing frontend code you
@@ -223,9 +246,9 @@ haven't verified against this version.
 - Ruff config lives in [pyproject.toml](pyproject.toml): `E`, `F`, `I` rules, 100-char lines, target py312.
 - `db/migrations/*.sql` are numbered and checksummed in `schema_migrations` by the
   runner (`db/migrate.py`) — never edit an already-applied migration file; add a new one.
-  Migrations 001-011 are applied locally. Migration 010 adds customer follow-up history
-  and migration 011 adds dynamic customer analysis. Migration 012 is planned for Meta
-  marketing tables (`docs/META_MARKETING_INTEGRATION.md`) and does not exist yet.
+  Migrations 001-013 are applied locally: 010 customer follow-ups, 011 dynamic customer
+  analysis, 012 customer sales configuration, 013 Meta marketing tables. Migration 013
+  is **not** on Supabase yet. The next new migration is 014.
 - `db/seeds/*.sql` preserve existing master rows; they don't silently repair
   conflicts or overwrite metadata on rerun.
 - Alias matching normalizes case/whitespace/HTML entities but never guesses or

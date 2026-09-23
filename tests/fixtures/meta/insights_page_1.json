@@ -1,0 +1,60 @@
+{
+  "data": [
+    {
+      "account_id": "1111111111",
+      "account_name": "Synthetic Account",
+      "account_currency": "INR",
+      "campaign_id": "2001",
+      "campaign_name": "Synthetic Hair Care Prospecting",
+      "objective": "OUTCOME_SALES",
+      "adset_id": "3001",
+      "adset_name": "Broad 25-45",
+      "ad_id": "4001",
+      "ad_name": "Hair Oil Video A",
+      "spend": "1250.50",
+      "impressions": "40000",
+      "reach": "25000",
+      "frequency": "1.6",
+      "clicks": "900",
+      "inline_link_clicks": "600",
+      "outbound_clicks": [{"action_type": "outbound_click", "value": "580"}],
+      "actions": [
+        {"action_type": "link_click", "value": "600"},
+        {"action_type": "landing_page_view", "value": "450"},
+        {"action_type": "omni_add_to_cart", "value": "40"},
+        {"action_type": "add_to_cart", "value": "40"},
+        {"action_type": "offsite_conversion.fb_pixel_add_to_cart", "value": "40"},
+        {"action_type": "omni_initiated_checkout", "value": "20"},
+        {"action_type": "omni_purchase", "value": "8"},
+        {"action_type": "offsite_conversion.fb_pixel_purchase", "value": "8"},
+        {"action_type": "post_engagement", "value": "1200"}
+      ],
+      "action_values": [
+        {"action_type": "omni_purchase", "value": "4800.00"},
+        {"action_type": "offsite_conversion.fb_pixel_purchase", "value": "4800.00"}
+      ],
+      "date_start": "2026-09-01",
+      "date_stop": "2026-09-01"
+    },
+    {
+      "account_id": "1111111111",
+      "account_currency": "INR",
+      "campaign_id": "2001",
+      "campaign_name": "Synthetic Hair Care Prospecting",
+      "objective": "OUTCOME_SALES",
+      "adset_id": "3001",
+      "adset_name": "Broad 25-45",
+      "ad_id": "4002",
+      "ad_name": "Hair Oil Static B",
+      "spend": "0.99",
+      "impressions": "12",
+      "clicks": "0",
+      "date_start": "2026-09-01",
+      "date_stop": "2026-09-01"
+    }
+  ],
+  "paging": {
+    "cursors": {"before": "BEFORE1", "after": "AFTER1"},
+    "next": "https://graph.facebook.com/v23.0/act_1111111111/insights?after=AFTER1&access_token=REDACTED"
+  }
+}

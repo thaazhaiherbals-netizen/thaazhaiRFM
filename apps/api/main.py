@@ -10,6 +10,7 @@ from sqlalchemy import text
 from apps.api.admin import router as admin_router
 from apps.api.config import get_settings
 from apps.api.db import get_engine
+from apps.api.marketing import router as marketing_router
 from apps.api.operations import router as operations_router
 
 logger = logging.getLogger("thaazhai.api")
@@ -47,3 +48,4 @@ def ready() -> HealthResponse | JSONResponse:
 
 app.include_router(admin_router)
 app.include_router(operations_router)
+app.include_router(marketing_router)
