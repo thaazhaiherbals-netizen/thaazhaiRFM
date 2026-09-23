@@ -1,0 +1,31 @@
+.performance-panel{margin-bottom:36px}
+.performance-heading{display:flex;justify-content:space-between;align-items:center;gap:20px}
+.performance-heading h2{font-size:28px;letter-spacing:-.6px;margin:8px 0}
+.performance-heading p,.performance-clock{color:#637568;font-size:13px}
+.performance-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0}
+.performance-tabs a{padding:10px 18px;border:1px solid #cbd9cf;border-radius:8px;color:#315742;text-decoration:none;background:#fff;font-weight:600}
+.performance-tabs a[aria-current=page]{background:#175c43;color:#fff;border-color:#175c43}
+.performance-tabs a:focus-visible{outline:3px solid #bc852b;outline-offset:3px}
+.performance-periods{display:flex;gap:24px;align-items:center;flex-wrap:wrap;padding:18px 22px;background:#eaf1eb;border-radius:12px}
+.performance-periods small,.performance-periods strong{display:block}
+.performance-periods small{color:#526959;margin-bottom:7px}
+.performance-periods>span{font-size:12px;color:#62716a}
+.performance-freshness{border-left:3px solid #b88c36;background:#fff9eb;padding:14px 18px;margin:18px 0;color:#605332;font-size:13px}
+.performance-freshness p{margin:7px 0;line-height:1.6}
+.performance-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.performance-metric{padding:22px;min-width:0;margin:0}
+.performance-metric h3{font-size:14px;margin:0 0 14px;color:#435a4a}
+.performance-value{font-size:30px;letter-spacing:-1px;display:block}
+.performance-metric p{font-size:12px;color:#6b746e}
+.performance-metric small{display:block;color:#6b746e;font-size:11px;line-height:1.5;margin-top:10px}
+.performance-bars{display:grid;gap:4px;margin:15px 0;background:#f5f7f4}
+.performance-bars i{height:6px;background:#237553;border-radius:3px;min-width:0}
+.performance-bars i+i{background:#afbfb3}
+.performance-change{font-size:12px;font-weight:600;color:#415b4b}
+.performance-insights{margin-top:18px;padding:24px}
+.performance-insights li{margin:12px 0;line-height:1.65}
+.performance-details{padding:18px;margin-top:16px}
+.performance-details summary{cursor:pointer;font-weight:600}
+.performance-details table{margin-top:15px}
+@media(max-width:1100px){.performance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.performance-grid{grid-template-columns:1fr}.performance-heading{display:block}.performance-periods{gap:14px}.performance-value{font-size:27px}}

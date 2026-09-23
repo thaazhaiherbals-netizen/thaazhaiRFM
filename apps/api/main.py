@@ -12,6 +12,7 @@ from apps.api.config import get_settings
 from apps.api.db import get_engine
 from apps.api.marketing import router as marketing_router
 from apps.api.operations import router as operations_router
+from apps.api.performance import router as performance_router
 
 logger = logging.getLogger("thaazhai.api")
 app = FastAPI(title="Thaazhai Operations API", version="0.1.0")
@@ -49,3 +50,5 @@ def ready() -> HealthResponse | JSONResponse:
 app.include_router(admin_router)
 app.include_router(operations_router)
 app.include_router(marketing_router)
+
+app.include_router(performance_router)
