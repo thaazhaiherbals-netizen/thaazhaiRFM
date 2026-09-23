@@ -43,6 +43,7 @@ const session = load("lib/session.ts");
 beforeEach(() => {
   process.env.ADMIN_API_TOKEN = "test-admin-code";
   process.env.VIEWER_UI_TOKEN = "test-viewer-code";
+  process.env.SUPPORT_UI_TOKEN = "test-support-code";
   process.env.ADMIN_UI_SESSION = "test-signing-secret";
   process.env.APP_URL = "https://example.test";
   cookie = undefined; calls = [];
@@ -130,4 +131,70 @@ test("viewer login sets a secure expiring cookie and redirects to public APP_URL
   assert.equal(result.cookies.options.httpOnly, true);
   assert.equal(result.cookies.options.secure, true);
   assert.equal(result.cookies.options.sameSite, "strict");
+});
+
+test("support credentials, tampering, expiry, rotation and collisions", () => {
+  assert.equal(session.loginRole("test-support-code"), "support");
+  const value = session.createSession("support", 1000);
+  assert.equal(session.sessionRole(value, 1000), "support");
+  assert.equal(session.sessionRole(value.replace("support", "admin"), 1000), null);
+  assert.equal(session.sessionRole(value, 1000 + session.SESSION_SECONDS * 1000), null);
+  process.env.SUPPORT_UI_TOKEN = "replacement";
+  assert.equal(session.sessionRole(value, 1000), null);
+  for (const code of [process.env.ADMIN_API_TOKEN, process.env.VIEWER_UI_TOKEN]) {
+    process.env.SUPPORT_UI_TOKEN = code;
+    assert.equal(session.loginRole(code), null);
+    assert.equal(session.sessionRole(session.createSession("admin")), null);
+  }
+  delete process.env.SUPPORT_UI_TOKEN;
+  assert.equal(session.sessionRole(value, 1000), null);
+});
+test("support data access permits customer work and rejects all other routes before fetch", async () => {
+  cookie = session.createSession("support");
+  const api = load("lib/api.ts").api;
+  const originalFetch = global.fetch;
+  global.fetch = async (...args) => { calls.push(args); return Response.json({ ok: true }); };
+  try {
+    for (const route of ["/customers?limit=50", "/customers/c1", "/orders/o1", "/admin/customer-segments"])
+      await api(route);
+    await api("/admin/customers/c1/follow-ups", { method: "POST" });
+    for (const route of ["/orders", "/admin/jobs", "/admin/ingestion", "/analytics/summary",
+      "/customers/../admin", "/customers/%2e%2e", "/admin/customer-segment-settings"])
+      await assert.rejects(api(route), /Administrator/);
+    for (const route of ["/admin/jobs/process-pending", "/admin/product-aliases", "/admin/customer-segment-settings"])
+      for (const method of ["POST", "PUT", "PATCH", "DELETE"])
+        await assert.rejects(api(route, { method }), /Administrator/);
+    await assert.rejects(api("/admin/customers/c1/follow-ups", { method: "DELETE" }), /Administrator/);
+    assert.equal(calls.length, 5);
+    const actions = load("app/actions.ts");
+    for (const name of ["startJob", "retryOrder", "correctDate", "saveMapping", "saveSegmentSettings"])
+      await assert.rejects(actions[name](new FormData()), /Administrator/);
+    const route = load("app/api/customers/[id]/follow-ups/route.ts");
+    const result = await route.POST({ json: async () => ({ notes: "Called customer" }) },
+      { params: Promise.resolve({ id: "c1" }) });
+    assert.equal(result.status, 201);
+    assert.equal(calls.length, 6);
+    await actions.logout();
+    assert.equal(cookie, undefined);
+  } finally { global.fetch = originalFetch; }
+});
+test("support proxy restricts pages and API methods; login lands on customers", async () => {
+  cookie = session.createSession("support");
+  const { proxy } = load("proxy.ts");
+  const request = (pathname, method = "GET") => ({
+    nextUrl: { pathname }, url: "https://example.test" + pathname, method,
+    cookies: { get: () => ({ value: cookie }) },
+  });
+  for (const page of ["/customers", "/customers/c1", "/orders/o1", "/api/customers/c1"])
+    assert.equal(proxy(request(page)).status, 200);
+  for (const page of ["/", "/orders", "/ingestion", "/jobs", "/mappings"])
+    assert.equal(proxy(request(page)).url, "https://example.test/customers");
+  assert.equal(proxy(request("/api/customers/c1/follow-ups", "POST")).status, 200);
+  assert.equal(proxy(request("/api/customers/c1/follow-ups", "DELETE")).status, 403);
+  assert.equal(proxy(request("/api/admin/jobs", "GET")).status, 403);
+  const route = load("app/api/login/route.ts");
+  const data = new FormData(); data.set("token", "test-support-code");
+  const result = await route.POST({ formData: async () => data, nextUrl: { origin: "http://localhost" } });
+  assert.equal(result.url, "https://example.test/customers");
+  assert.equal(session.sessionRole(result.cookies.value), "support");
 });

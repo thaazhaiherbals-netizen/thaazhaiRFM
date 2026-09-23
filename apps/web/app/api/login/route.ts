@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   if (!role) return NextResponse.redirect(new URL("/login?error=1", appUrl), 303);
   if (!process.env.ADMIN_UI_SESSION)
     return NextResponse.json({ error: "UI session is not configured" }, { status: 503 });
-  const response = NextResponse.redirect(new URL("/", appUrl), 303);
+  const response = NextResponse.redirect(new URL(role === "support" ? "/customers" : "/", appUrl), 303);
   response.cookies.delete("thaazhai_admin");
   response.cookies.set(SESSION_COOKIE, createSession(role), {
     httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production",

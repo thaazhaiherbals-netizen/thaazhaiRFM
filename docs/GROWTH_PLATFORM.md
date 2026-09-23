@@ -1,7 +1,9 @@
 # Growth platform (Phases 6-10, planning)
 
-This is a planning document, not an implementation record. Nothing described here
-is built. It exists so the founders and future contributors share one picture of
+This is a planning document, not an implementation record. **Status 2026-09-23:** the
+Meta Ads half of Layer 1 is built (see
+[META_MARKETING_INTEGRATION.md](META_MARKETING_INTEGRATION.md)); everything else here,
+including Zoho, is not built. It exists so the founders and future contributors share one picture of
 where Phases 6-10 are headed before any schema or integration work starts.
 
 ## The problem being solved
@@ -34,10 +36,28 @@ Answers: is the business bleeding, and where does the money go.
   responses, normalize into reporting tables, never invent a missing category
   or backfill a number that wasn't reported.
 
-Open items: Zoho expense category mapping (owner: founders). Meta Business/ad
-account access and reporting decisions (owner: admin). The implementation contract
-for Meta is now in [META_MARKETING_INTEGRATION.md](META_MARKETING_INTEGRATION.md);
-the integration remains unbuilt.
+Meta: built and running locally against the live account; production rollout
+pending ([META_MARKETING_INTEGRATION.md](META_MARKETING_INTEGRATION.md)).
+
+Zoho (next): requested scope is **expenses and stock-based analytics**. Before any
+schema work, write `docs/ZOHO_INTEGRATION.md` in the same shape as the Meta contract,
+settling first:
+
+1. Which Zoho product(s): Books (expenses, bills, vendor payments) and/or Inventory
+   (items, stock on hand, warehouses, adjustments); organization ID and data centre
+   (.in / .com), since API hosts differ by region.
+2. OAuth: a Zoho API console client with read-only scopes and a refresh token kept
+   server-side like the Meta token; access tokens are short-lived and refreshed.
+3. Expense category mapping to COGS / marketing / opex / payroll / fees (owner:
+   founders). Categories decide the schema, not the other way round.
+4. Stock: how Zoho item/SKU IDs map to `products`/`product_variants` (never guess;
+   unmapped items stay visible, like `PENDING` order items), and whether stock is
+   snapshotted daily for trend analytics (stock-outs, days of cover, sell-through).
+5. History start date, sync time and rate limits.
+
+Then follow the Meta slice order: optional settings, migration, fixture-tested client
+and parser, append-only raw landing plus idempotent normalization, CLI and scheduler,
+reporting API, UI, live reconciliation against Zoho reports.
 
 ### Layer 2 — Funnel efficiency (ad spend vs. orders vs. new customers vs. abandoned carts)
 
@@ -108,3 +128,9 @@ integrations in [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md). This document is
 where those integrations get a concrete sequence and rationale once the
 founders are ready to commit to build order. Nothing here changes what's
 already implemented (Phases 1-3) or in progress.
+
+
+## Future business intelligence vision
+
+See [Business intelligence and customer action loop](BUSINESS_INTELLIGENCE_VISION.md)
+for the future direction and incremental delivery plan. This is planning, not implemented functionality.

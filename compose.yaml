@@ -24,6 +24,14 @@ services:
       DATABASE_URL: postgresql://${LOCAL_DB_USER}:${LOCAL_DB_PASSWORD}@postgres:5432/${LOCAL_DB_NAME}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?Set ADMIN_API_TOKEN in .env.local}
       CORS_ORIGINS: '["http://localhost:3000"]'
+      META_AD_ACCOUNT_ID: ${META_AD_ACCOUNT_ID:-}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-}
+      META_SYNC_START_DATE: ${META_SYNC_START_DATE:-}
+      META_SYNC_LOOKBACK_DAYS: ${META_SYNC_LOOKBACK_DAYS:-7}
+      META_ATTRIBUTION_WINDOWS: ${META_ATTRIBUTION_WINDOWS:-}
+      META_ACTION_REPORT_TIME: ${META_ACTION_REPORT_TIME:-conversion}
+      META_SYNC_TIME: ${META_SYNC_TIME:-06:00}
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +48,29 @@ services:
     environment:
       APP_ENV: development
       DATABASE_URL: postgresql://${LOCAL_DB_USER}:${LOCAL_DB_PASSWORD}@postgres:5432/${LOCAL_DB_NAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./workers:/app/workers
+    restart: unless-stopped
+  meta-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    command: ["python", "-m", "workers.meta_sync"]
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://${LOCAL_DB_USER}:${LOCAL_DB_PASSWORD}@postgres:5432/${LOCAL_DB_NAME}
+      META_AD_ACCOUNT_ID: ${META_AD_ACCOUNT_ID:-}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-}
+      META_SYNC_START_DATE: ${META_SYNC_START_DATE:-}
+      META_SYNC_LOOKBACK_DAYS: ${META_SYNC_LOOKBACK_DAYS:-7}
+      META_ATTRIBUTION_WINDOWS: ${META_ATTRIBUTION_WINDOWS:-}
+      META_ACTION_REPORT_TIME: ${META_ACTION_REPORT_TIME:-conversion}
+      META_SYNC_TIME: ${META_SYNC_TIME:-06:00}
     depends_on:
       postgres:
         condition: service_healthy

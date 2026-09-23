@@ -25,6 +25,15 @@ database only. Keep the initial local credentials unless you intentionally updat
 the database account. Use URL-safe local credentials; if you change them, update
 DATABASE_URL for native access consistently too.
 
+## Meta Ads settings
+
+Optional `META_*` values in root `.env.local` (local) or host variables (production)
+enable Meta Ads reporting; see the settings table in
+[META_MARKETING_INTEGRATION.md](META_MARKETING_INTEGRATION.md). `compose.yaml` passes
+them to the `api` and `meta-scheduler` containers. The web app never receives them.
+Blank values keep everything running. Recreate `api` and `meta-scheduler` after
+changing them. Tests override them to blank so a real token never reaches a test.
+
 ## Which settings does Python read?
 
 1. Read APP_ENV from the process environment; default is development.

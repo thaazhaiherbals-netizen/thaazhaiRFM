@@ -1,3 +1,4 @@
+import { PerformancePanel } from "./performance-panel";
 import { api } from "@/lib/api";
 import { Icon, Money, Shell } from "./components";
 import {
@@ -20,9 +21,11 @@ const months = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
 export default async function DashboardPage({ searchParams }: {
-  searchParams: Promise<{ year?: string; month?: string; view?: string }>;
+  searchParams: Promise<{ year?: string; month?: string; view?: string; compare?: string }>;
 }) {
   const params = await searchParams;
+  const compare = ["today", "yesterday", "week", "month"].includes(params.compare || "") ? params.compare! : "week";
+  const preserved = Object.fromEntries(Object.entries(params).filter(([key, value]) => key !== "compare" && typeof value === "string")) as Record<string, string>;
   const parsedYear = Number(params.year);
   const legacyMonth = Number(params.month);
   const view = params.view || (
@@ -54,10 +57,12 @@ export default async function DashboardPage({ searchParams }: {
 
   return <Shell title="Executive dashboard"
     subtitle={"Revenue, customers and product performance for " + periodName}>
+    <PerformancePanel period={compare} preserved={preserved} />
     <section className="executive-toolbar">
       <div><span className="section-kicker">Business pulse</span>
         <h2>{periodName} performance</h2><p>All figures update from processed orders.</p></div>
       <form className="period-filter">
+        <input type="hidden" name="compare" value={compare} />
         <label><span>Financial year</span><select name="year" defaultValue={data.selected_year}>
           {data.available_years.map(year => <option key={year} value={year}>{year}</option>)}
         </select></label>
@@ -73,7 +78,7 @@ export default async function DashboardPage({ searchParams }: {
     </section>
 
     <section className="metric-grid executive-grid">
-      <MetricCard label="Net revenue" value={<Money value={data.summary.revenue} compact />}
+      <MetricCard label="Recorded sales" value={<Money value={data.summary.revenue} compact />}
         icon="rupee" change={data.summary.revenue_change} detail="vs previous period" />
       <MetricCard label="Orders" value={data.summary.order_count.toLocaleString("en-IN")}
         icon="bag" change={data.summary.order_change} detail="processed sales" tone="blue" />

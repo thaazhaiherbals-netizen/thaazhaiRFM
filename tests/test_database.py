@@ -25,7 +25,7 @@ def test_migrations_and_seeds_are_repeatable():
         assert connection.execute(text("SELECT count(*) FROM product_variants")).scalar_one() == 25
         assert connection.execute(text("SELECT count(*) FROM product_aliases")).scalar_one() == 8
         assert connection.execute(text("SELECT count(*) FROM orders")).scalar_one() == 0
-        assert connection.execute(text("SELECT count(*) FROM schema_migrations")).scalar_one() == 15
+        assert connection.execute(text("SELECT count(*) FROM schema_migrations")).scalar_one() == 16
         assert (
             connection.execute(
                 text(
@@ -44,6 +44,18 @@ def test_migrations_and_seeds_are_repeatable():
                 )
             ).scalar_one()
             == 3
+        )
+        assert (
+            connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_tables WHERE schemaname = 'public' "
+                    "AND tablename IN ('meta_ad_accounts', 'meta_campaigns', "
+                    "'meta_ad_sets', 'meta_ads', 'meta_insight_sync_runs', "
+                    "'raw_meta_insights', 'meta_ad_daily_performance') "
+                    "AND rowsecurity"
+                )
+            ).scalar_one()
+            == 7
         )
         assert (
             connection.execute(

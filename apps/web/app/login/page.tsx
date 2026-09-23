@@ -6,7 +6,7 @@ export default async function Login({ searchParams }: {
     <form action="/api/login" method="post" className="login-card">
       <p className="eyebrow">THAAZHAI OPERATIONS</p>
       <h1>Team access</h1>
-      <p>Enter the access code shared by your administrator. Your code gives you either view-only or administrator access.</p>
+      <p>Enter the access code shared by your administrator. Your code gives you viewer, customer support, or administrator access.</p>
       <label>Access code<input name="token" type="password" required autoFocus /></label>
       {error && <div className="alert error">That token is not valid.</div>}
       <button className="button primary">Sign in</button>

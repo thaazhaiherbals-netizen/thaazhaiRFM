@@ -92,7 +92,8 @@ export default async function Customers({ searchParams }: {
     follow_up_status?: string; segment?: string; tag?: string; sales_signal?: string;
   }>;
 }) {
-  const canWrite = (await currentRole()) === "admin";
+  const role = await currentRole();
+  const canWrite = role === "admin";
   const params = await searchParams;
   const search = params.search || "", offset = Number(params.offset || 0), limit = 50;
   const sort = allowedSorts.includes(params.sort || "") ? params.sort! : "last_order_date";
@@ -193,7 +194,7 @@ export default async function Customers({ searchParams }: {
       <input type="hidden" name="direction" value={direction} />
       <button className="button">Apply</button>
     </form>
-    <CustomerTable canWrite={canWrite} customers={data.items} sort={sort} direction={direction}
+    <CustomerTable canWrite={canWrite || role === "support"} customers={data.items} sort={sort} direction={direction}
       search={search} followUpStatus={followUpStatus} segment={segment} tag={tag}
       salesSignal={salesSignal} />
     <Pager total={data.total} offset={offset} limit={limit} path="/customers"

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { logout } from "./actions";
+import { currentRole } from "@/lib/auth";
 
 export type IconName = "dashboard" | "database" | "jobs" | "tag" | "bag" | "users" |
-  "rupee" | "trend" | "repeat" | "package" | "calendar" | "spark";
+  "rupee" | "trend" | "repeat" | "package" | "calendar" | "spark" | "megaphone";
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -17,6 +18,7 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     repeat: <><path d="m17 1 4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></>,
     package: <><path d="m12 2 9 5-9 5-9-5 9-5Z" /><path d="m3 7 9 5 9-5v10l-9 5-9-5V7Z" /><path d="M12 12v10" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
+    megaphone: <><path d="M3 11v2a1 1 0 0 0 1 1h3l7 5V5L7 10H4a1 1 0 0 0-1 1Z" /><path d="M18 8.5a5 5 0 0 1 0 7" /></>,
     spark: <><path d="m12 2 1.7 5.3L19 9l-5.3 1.7L12 16l-1.7-5.3L5 9l5.3-1.7L12 2Z" /><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" /></>,
   };
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24"
@@ -24,17 +26,19 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-export function Shell({ title, subtitle, children }: {
+export async function Shell({ title, subtitle, children }: {
   title: string; subtitle?: string; children: React.ReactNode;
 }) {
-  const links: [string, string, IconName][] = [
+  const role = await currentRole();
+  const links: [string, string, IconName][] = role === "support" ? [["/customers", "Customers", "users"]] : [
     ["/", "Dashboard", "dashboard"], ["/ingestion", "Ingestion", "database"],
     ["/jobs", "Jobs", "jobs"], ["/mappings", "Mappings", "tag"],
     ["/orders", "Orders", "bag"], ["/customers", "Customers", "users"],
+    ["/marketing", "Marketing", "megaphone"],
   ];
   return <div className="shell">
     <aside>
-      <Link className="brand" href="/"><span className="brand-mark">T</span>
+      <Link className="brand" href={role === "support" ? "/customers" : "/"}><span className="brand-mark">T</span>
         <span className="brand-copy"><strong>thaazhai</strong><small>BUSINESS INTELLIGENCE</small></span>
       </Link>
       <div className="nav-label">Workspace</div>

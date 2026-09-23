@@ -1,10 +1,154 @@
-# Meta Marketing API integration handoff
+# Meta Marketing API integration
 
-This is the implementation-ready brief for Phase 6 marketing performance ingestion.
-Give this file to the developer or coding agent responsible for the Meta integration.
+Design contract **and** operating guide for Phase 6 read-only Meta Ads reporting.
 
-**Status: designed, not implemented.** No Meta credential, API client, database table,
-sync process, endpoint, or marketing page exists yet.
+**Status (2026-09-23): implemented and running locally against the live ad account;
+not deployed to production; not yet committed** (see `docs/CLAUDE_HANDOFF.md`,
+"Repository state"). Spend reconciles exactly with Meta's account-level control total
+for every run. Remaining: an Ads Manager spot check of results metrics, review of
+unclassified action types, and production rollout.
+
+## How it works (operating guide)
+
+```
+Meta Graph API (ads_read) --sync--> PostgreSQL --read--> /admin/marketing/* --> /marketing
+        ^                               ^
+        |  CLI backfill, in-app sync,   |  orders/customers for blended MER/CAC
+        |  daily scheduler              |
+```
+
+The dashboard never calls Meta. Changing dates filters data already synced; a **sync**
+is what calls Meta. This keeps reports fast, avoids Meta rate limits, allows joining
+with `orders`, and preserves history and restatements.
+
+### One sync run (`apps/api/integrations/meta/sync.py`)
+
+1. Take a PostgreSQL advisory lock per ad account (a second run gets "already running").
+2. Insert a `meta_insight_sync_runs` row (`RUNNING`, dates, attribution, API version).
+3. Read account name/currency/timezone into `meta_ad_accounts`.
+4. Fetch ad-level daily Insights (`level=ad`, `time_increment=1`), cursor-paginated;
+   runs longer than 7 days (in-app) or with `--async` (CLI) use Meta's async reports.
+5. Land every row unchanged in append-only `raw_meta_insights` (committed per page).
+6. Fetch Meta's account-level spend for the same dates as a control total.
+7. In one transaction: upsert campaigns/ad sets/ads by ID, **delete** facts for the
+   account + dates + attribution key, rebuild them from this run's raw rows.
+8. Mark `SUCCEEDED` with normalized vs control spend, or `FAILED` with a sanitized
+   error (the token is scrubbed). A failed run leaves previous facts untouched.
+
+**Re-syncing the same dates is safe:** facts are replaced, never added, so totals do
+not double; Meta restatements and withdrawn rows are reflected; raw history keeps
+every version.
+
+### Ways to sync
+
+| Way | Command / place | Notes |
+|---|---|---|
+| Backfill | `docker compose --env-file .env.local exec api python -m db.import_meta_insights --from 2026-03-01 --to 2026-09-22 --async` | 31-day chunks (`--chunk-days`), trigger `BACKFILL` |
+| Recent window | `docker compose --env-file .env.local exec api python -m db.import_meta_insights --recent` | `META_SYNC_LOOKBACK_DAYS` through yesterday, account timezone |
+| In app (admin) | `/marketing` "Sync from Meta" form, or "Fetch these dates" in the coverage banner | `POST /admin/marketing/sync`; up to 31 days inline, up to 400 days in background 31-day chunks (HTTP 202) |
+| Daily schedule | compose service `meta-scheduler` (`python -m workers.meta_sync`) | After `META_SYNC_TIME` (account timezone) re-fetches the lookback through yesterday once per day; catches up if the host was off; retries every 30 min, max 3 attempts/day; idle when Meta is not configured |
+
+The scheduler decides from sync-run history (`apps/api/integrations/meta/schedule.py`),
+not memory, so restarts are safe. Worker processes do not auto-reload: after code
+changes run `docker compose --env-file .env.local restart meta-scheduler`.
+
+### Settings (root `.env.local`; host variables in production)
+
+| Variable | Meaning |
+|---|---|
+| `META_AD_ACCOUNT_ID` | Numeric ad account ID (`act_` prefix optional) |
+| `META_ACCESS_TOKEN` | System-user token with **only `ads_read`**; starts with `EAA` |
+| `META_GRAPH_API_VERSION` | e.g. `v23.0` (format validated) |
+| `META_SYNC_START_DATE` | Optional earliest date the CLI may backfill |
+| `META_SYNC_LOOKBACK_DAYS` | Default 7; recent/scheduled re-fetch window |
+| `META_ATTRIBUTION_WINDOWS` | Default `["7d_click","1d_view"]`; comma list also accepted |
+| `META_ACTION_REPORT_TIME` | `conversion` (default), `impression` or `mixed` |
+| `META_SYNC_TIME` | Daily scheduler time `HH:MM` in account timezone; default `06:00` |
+
+Blank values keep the app running; sync endpoints then return 503. Recreate containers
+after changing values:
+`docker compose --env-file .env.local up -d --force-recreate api meta-scheduler`.
+Changing attribution settings creates a new attribution key and reports only show facts
+for the current key, so re-backfill after changing it.
+
+### Getting a token (done once on 2026-09-23)
+
+1. developers.facebook.com: create an app (Business type / Marketing API use case)
+   connected to the Thaazhai Business portfolio.
+2. Business Settings > Users > System users: create a system user, then **Assign
+   assets**: the app (Manage/Develop app) and the ad account (**View performance** only).
+3. Generate a token for that app with only `ads_read` (expiry "Never" if offered).
+4. Paste it into `.env.local` directly, never into chat, Git or docs.
+
+| Error (sync-runs / CLI) | Cause |
+|---|---|
+| `code 190` "Cannot parse access token" | Value malformed (placeholder, quotes, spaces) |
+| `code 190` expired/invalid | Regenerate the token |
+| `code 200` "has NOT grant ads_management or ads_read" | System user not assigned to the ad account, token lacks `ads_read`, or app not authorized for the account |
+| `code 100` | Wrong account ID or unsupported API version |
+| HTTP 409 on sync | Another sync for the account is running |
+
+### API
+
+All under `/admin/marketing`, admin bearer token. In the web app admins and viewers can
+read `/marketing`; only admins can sync; the support role has no access. Dates default
+to the 30 days ending yesterday. Swagger: `http://localhost:8000/docs` > Authorize.
+
+- `GET /overview?date_from=&date_to=`: Meta totals and ratios; business revenue, orders,
+  new customers; blended MER, spend per order, new-customer CAC; daily series;
+  `coverage` (days not covered by a successful sync); freshness; unclassified actions.
+- `GET /campaigns?date_from=&date_to=&sort=&direction=&limit=&offset=`
+- `GET /campaigns/{campaign_id}?date_from=&date_to=`: totals, ad sets, ads.
+- `GET /sync-runs`: history including `control_difference`.
+- `POST /sync` `{"date_from","date_to"}`: see "Ways to sync".
+
+### Code map
+
+- `apps/api/integrations/meta/client.py`: HTTP; cursor pagination (never follows
+  `paging.next`, which embeds the token); async reports; bounded retries.
+- `apps/api/integrations/meta/parser.py`: pure parsing and action-type priority lists.
+- `apps/api/integrations/meta/sync.py`: lock, raw landing, normalization.
+- `apps/api/integrations/meta/schedule.py`, `workers/meta_sync/`: daily scheduler.
+- `db/import_meta_insights.py`: CLI. `apps/api/marketing.py`: reports and manual sync.
+- `apps/web/app/marketing/`: page, campaign drill-down, chart.
+- Tests: `tests/test_meta_*.py`, `tests/test_marketing_api.py`, `tests/fixtures/meta/`.
+
+### Action-type mapping (confirmed on the live account)
+
+Each metric takes the **first present** type from its list; overlapping types describe
+the same event and summing them would double count.
+
+- purchases and value: `omni_purchase`, `purchase`, `offsite_conversion.fb_pixel_purchase`
+- add to cart: `omni_add_to_cart`, `add_to_cart`, `offsite_conversion.fb_pixel_add_to_cart`
+- checkouts: `omni_initiated_checkout`, `initiate_checkout`,
+  `offsite_conversion.fb_pixel_initiate_checkout` (this account uses `initiate_checkout`)
+- leads: `lead`, `onsite_conversion.lead_grouped`, `offsite_conversion.fb_pixel_lead`
+- landing page views: `landing_page_view`, `omni_landing_page_view`; link clicks come
+  from `inline_link_clicks`.
+
+Everything else stays in the `actions` JSON and is listed as "Unclassified". The live
+account also reports messaging (`onsite_conversion.messaging_*`), custom conversions
+(`offsite_*_add_20_s_calls`, `offsite_*_add_meta_leads`), `onsite_web_*` and
+engagement types. Promote one to a column only after owner confirmation, via a new
+migration plus a re-sync.
+
+### Owner inputs (recorded 2026-09-23)
+
+1. Ad account "Thaazhai New Ad account" (ID kept in `.env.local`, not in docs).
+2. Currency INR, timezone Asia/Kolkata (read from the API).
+3. System-user token with `ads_read`, configured locally.
+4. History from 2026-03-01 (first spend 2026-04-11).
+5. Attribution 7-day click + 1-day view, `action_report_time=conversion`.
+6. Action types confirmed above; messaging and custom conversions pending review.
+7. Business revenue stays gross `orders.order_value` (revisit refunds/tax later).
+8. Daily sync 06:00 IST. **Owner for token failures: not yet named.**
+
+---
+
+# Design contract
+
+The sections below are the original contract. They still govern changes: keep the
+grain, security, metric and test rules when extending the integration.
 
 ## Outcome
 
@@ -96,9 +240,10 @@ Do not put account-, campaign-, ad-set- and ad-level responses in one fact and s
 That multiplies spend. If account-level pulls are used for reconciliation, store them as
 separate control totals.
 
-## Proposed migration 012
+## Migration 013 (implemented)
 
-Create `012_meta_marketing.sql`. Never edit an applied migration.
+Implemented as `013_meta_marketing.sql` (012 was already used). Never edit it once
+applied anywhere; add a new migration instead.
 
 ### meta_ad_accounts
 
@@ -193,10 +338,9 @@ Example env files reserve:
 - `META_ATTRIBUTION_WINDOWS`
 - `META_ACTION_REPORT_TIME`
 
-Add typed settings when implementation begins. The app must still start without Meta
-configuration; marketing sync endpoints return 503 when required settings are absent.
-Production secrets belong in Render environment variables, never Git, logs, HTML,
-browser requests or any `NEXT_PUBLIC_*` variable.
+Implemented as typed settings in `apps/api/config.py` plus `META_SYNC_TIME` (see the
+settings table above). Production secrets belong in host environment variables, never
+Git, logs, HTML, browser requests or any `NEXT_PUBLIC_*` variable.
 
 ## Sync and scheduling
 
@@ -204,8 +348,8 @@ Provide:
 
 1. Historical backfill with explicit dates and bounded chunks.
 2. Manual recent-window sync for development/recovery.
-3. Daily production sync through a separate Render cron job or explicit scheduler,
-   not the order-processing worker loop.
+3. Daily production sync through a separate scheduler service (implemented as
+   `workers/meta_sync`), not the order-processing worker loop.
 4. Visible sync-run history with failure reason and last successful data date.
 
 Recommended daily flow:
@@ -281,27 +425,20 @@ The job is complete only when:
 9. Python lint/database tests/TypeScript/production build pass.
 10. README, DATA_MODEL, VALIDATION and this file are updated from planned to implemented.
 
-## Suggested sequence
+## Remaining work
 
-1. Add typed optional settings and validation.
-2. Add migration 012 and database tests.
-3. Build/test the client and pure parser with redacted fixtures.
-4. Implement idempotent sync and manual CLI.
-5. Add reporting endpoints and tests.
-6. Add Marketing UI with freshness/error states and drill-down.
-7. Confirm the eight owner inputs and save one redacted real Insights response.
-8. Reconcile a small date range with Ads Manager.
-9. Add production cron only after reconciliation sign-off.
-10. Backfill history in bounded windows and record results in VALIDATION.
+Done: settings, migration, client/parser, sync and CLI, API, UI, scheduler, owner inputs
+1-7, local backfill 2026-03-01 to 2026-09-22 with exact spend reconciliation.
 
-## Copyable job prompt
-
-Implement `docs/META_MARKETING_INTEGRATION.md` end to end for this repository. Start by
-recording the eight business-owner inputs and a redacted real Insights response. Build
-the optional configuration, migration 012, fixture-tested Meta client/parser,
-idempotent raw and normalized sync, authenticated reporting endpoints, Marketing UI,
-and reconciliation workflow. Keep Meta credentials server-side, keep platform-attributed
-conversions distinct from business orders, and do not schedule production sync or
-backfill the live account until the small-range Ads Manager reconciliation passes.
-Preserve the existing order-processing and analytics baseline and update the
-documentation and validation evidence when implementation is complete.
+1. Ads Manager spot check of results metrics (purchases, value, link clicks) on one or
+   two dates with identical attribution; record in `docs/VALIDATION.md` (acceptance
+   criteria 3-4).
+2. Owner review of unclassified action types; name the token-failure owner.
+3. Commit on `feature/meta-marketing-integration`, separately from the support-access
+   work that shares the working tree.
+4. Production: apply only migration 013 after comparing Supabase migration history; set
+   `META_*` on the API; add an always-on `python -m workers.meta_sync` service with a
+   direct/session database connection; backfill with the CLI; verify the dashboard.
+5. Optional: quiet `httpx` INFO logs (they print request URLs, never the token); ad
+   status enrichment; campaign-level business attribution once orders carry UTM or
+   click IDs (separate design).

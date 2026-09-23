@@ -28,3 +28,25 @@ Run `npm --prefix apps/web run test:auth`, `npm --prefix apps/web run typecheck`
 After a build, run `npm --prefix apps/web run test:viewer` for an isolated production HTTP smoke test using an in-memory API fixture; it never uses real credentials or a database.
 
 Auth tests exercise the actual session code, proxy, API data layer, Server Actions and follow-up route with request/transport mocks; they never connect to Supabase.
+
+## Customer support access
+
+The third login code, SUPPORT_UI_TOKEN, is for the customer support team.
+Support can search/filter customers, inspect groups and order details, and save
+customer follow-ups. Support cannot access the dashboard, orders list, ingestion,
+jobs or mappings, or change bucket configuration. Existing viewer access remains
+read-only. Administrators retain full access.
+
+Set SUPPORT_UI_TOKEN on the web service only, using a distinct random secret.
+A local code has been generated in apps/web/.env.local (ignored by Git).
+Restart the web service after changing it. For production, add a separate random
+SUPPORT_UI_TOKEN to the web service environment and deploy this branch.
+The support login opens /customers. The code is a website login credential;
+it is not accepted as a bearer token by the Python API.
+
+Support permissions are allowlisted in the proxy and independently in the server
+API helper. Admin Server Actions reject support before reading submitted fields.
+The follow-up route explicitly permits support; bucket configuration stays admin-only.
+Rotating/removing the support code revokes support sessions after restart.
+All three codes must differ; duplicate configured codes reject logins and sessions.
+Sessions expire after eight hours. This is shared team access, not individual accounts.

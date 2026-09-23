@@ -383,7 +383,7 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
       <label className="follow-up-notes"><span>Call notes or full concern</span><textarea name="notes"
         maxLength={1000} placeholder="Write the important details for the next team member" /></label>
       <button className="button primary" disabled={!canWrite || saving}
-        title={!canWrite ? "Only administrators can save call results" : undefined}>
+        title={!canWrite ? "Customer support or administrator access is required to save call results" : undefined}>
         {!canWrite ? "Save call result (view only)" : saving ? "Saving call..." : "Save call result"}</button>
     </form>
     <div className="follow-up-history">
