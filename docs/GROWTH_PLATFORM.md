@@ -128,3 +128,9 @@ integrations in [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md). This document is
 where those integrations get a concrete sequence and rationale once the
 founders are ready to commit to build order. Nothing here changes what's
 already implemented (Phases 1-3) or in progress.
+
+
+## Future business intelligence vision
+
+See [Business intelligence and customer action loop](BUSINESS_INTELLIGENCE_VISION.md)
+for the future direction and incremental delivery plan. This is planning, not implemented functionality.

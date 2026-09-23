@@ -143,3 +143,9 @@ customer-support and Meta marketing work onto their own branches. Then continue 
 the next item in "Next work, in priority order". Start every feature on a new branch,
 preserve the environment boundaries and data rules, run the validation commands after
 each slice, and record evidence in `docs/VALIDATION.md`.
+
+
+## Future business intelligence vision
+
+See [Business intelligence and customer action loop](BUSINESS_INTELLIGENCE_VISION.md)
+for the future direction and incremental delivery plan. This is planning, not implemented functionality.
