@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { logout } from "./actions";
+import { currentRole } from "@/lib/auth";
 
 export type IconName = "dashboard" | "database" | "jobs" | "tag" | "bag" | "users" |
   "rupee" | "trend" | "repeat" | "package" | "calendar" | "spark" | "megaphone";
@@ -25,10 +26,11 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-export function Shell({ title, subtitle, children }: {
+export async function Shell({ title, subtitle, children }: {
   title: string; subtitle?: string; children: React.ReactNode;
 }) {
-  const links: [string, string, IconName][] = [
+  const role = await currentRole();
+  const links: [string, string, IconName][] = role === "support" ? [["/customers", "Customers", "users"]] : [
     ["/", "Dashboard", "dashboard"], ["/ingestion", "Ingestion", "database"],
     ["/jobs", "Jobs", "jobs"], ["/mappings", "Mappings", "tag"],
     ["/orders", "Orders", "bag"], ["/customers", "Customers", "users"],
@@ -36,7 +38,7 @@ export function Shell({ title, subtitle, children }: {
   ];
   return <div className="shell">
     <aside>
-      <Link className="brand" href="/"><span className="brand-mark">T</span>
+      <Link className="brand" href={role === "support" ? "/customers" : "/"}><span className="brand-mark">T</span>
         <span className="brand-copy"><strong>thaazhai</strong><small>BUSINESS INTELLIGENCE</small></span>
       </Link>
       <div className="nav-label">Workspace</div>

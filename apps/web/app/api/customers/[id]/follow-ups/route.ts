@@ -3,7 +3,7 @@ import { currentRole } from "@/lib/auth";
 import { accessStatus } from "@/lib/session";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const status = accessStatus(await currentRole(), "POST");
+  const status = accessStatus(await currentRole(), "POST", "/api/customers/customer/follow-ups");
   if (status !== 200) return Response.json({ detail: "Administrator access required" }, { status });
   const { id } = await context.params;
   const body = await request.json();
