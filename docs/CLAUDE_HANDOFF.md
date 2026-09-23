@@ -181,3 +181,9 @@ Start with credential-independent configuration, migration and fixture-tested pa
 Preserve all documented data and security invariants, run the appropriate checks after
 each slice, and update `docs/VALIDATION.md` with evidence. Ask me for the eight live
 account inputs only when they are needed for real-account reconciliation.
+
+
+## Future business intelligence vision
+
+See [Business intelligence and customer action loop](BUSINESS_INTELLIGENCE_VISION.md)
+for the future direction and incremental delivery plan. This is planning, not implemented functionality.
