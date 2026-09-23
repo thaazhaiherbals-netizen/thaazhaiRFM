@@ -8,9 +8,12 @@ export function proxy(request: NextRequest) {
     if (path.startsWith("/api/")) return NextResponse.json({ detail: "Please sign in" }, { status: 401 });
     return NextResponse.redirect(new URL("/login", process.env.APP_URL || request.url));
   }
+  if (role === "support" && !path.startsWith("/api/")
+    && accessStatus(role, "GET", path) !== 200)
+    return NextResponse.redirect(new URL("/customers", process.env.APP_URL || request.url), 303);
   // Server Actions enforce access in the data layer; logout remains available to viewers.
-  if (path.startsWith("/api/") && accessStatus(role, request.method) === 403)
-    return NextResponse.json({ detail: "Viewer access is read-only" }, { status: 403 });
+  if (path.startsWith("/api/") && accessStatus(role, request.method, path) === 403)
+    return NextResponse.json({ detail: role === "viewer" ? "Viewer access is read-only" : "Customer support access does not permit this action" }, { status: 403 });
   return NextResponse.next();
 }
 export const config = { matcher: ["/((?!_next/static|_next/image).*)"] };
