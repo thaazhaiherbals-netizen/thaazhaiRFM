@@ -55,26 +55,36 @@ Zero denominators produce unavailable ratios. Zero prior values never produce in
 or a made-up 100% increase.
 
 Order ingestion does not yet expose a reliable completeness watermark. The dashboard
-always labels coverage unverified. If the latest recorded order is earlier than a
-comparison's end date, withhold sales-related percentage/absolute changes and blended
-ratios; preserve observed sales totals and independent Meta comparisons. A quiet day
-and a missing feed cannot be distinguished automatically. Reaching the end date also
-does not prove that every order is present; the coverage warning remains visible.
+labels coverage unverified, but does not discard calculable metrics just because the
+last recorded order precedes the period end. Sales changes, CAC and MER use the available
+order records, marked provisional when this date gap exists. Insight text avoids
+treating those provisional changes as confirmed business trends.
 
-Local verification found orders through September 16 while Meta covers through
-September 22. This is why recent sales verdicts are currently withheld. A reliable
-source watermark and updated order feed are follow-up work, not silently inferred here.
+CAC is Meta spend divided by actual new customers in order history, never Meta purchases.
+Zero actual new customers produces an undefined CAC with an explicit card explanation.
+Missing Meta coverage or currency mismatch still prevents cross-source ratios. Today
+remains partial and has no percentage verdict. The CAC card shows two decimal places
+and its spend / customer-count calculation.
+
+Fix branch: codex/fix-available-records-cac, based on dashboard commit fe4449e.
+Fix worktree: C:/Raja/Thaazhai/worktrees/available-records-cac.
+Review the fix against codex/business-performance-comparisons.
+The preview on port 3001 now runs this fix; the original feature branch stays unchanged.
+
+Local regression baseline: September monthly spend 58377.12 / 127 actual new customers
+= 459.66. Meta reported 183 purchases, which is intentionally not used as the denominator.
+A week with zero recorded new customers has no calculable CAC.
 
 ## Validation
 
-- 12 focused pytest cases passed: completed weekday matching, empty periods, leap
+- 14 focused pytest cases passed (including available-record CAC regressions): completed weekday matching, empty periods, leap
   years, month-length/year boundaries, partial today, zero/missing baselines, Meta
-  coverage, currency mismatch, ratio denominators, stale orders, auth and input validation.
+  coverage, currency mismatch, ratio denominators, provisional order data, auth and input validation.
 - Ruff passed for changed Python files; Next.js production build and TypeScript passed.
 - Read-only local API checks: all four modes returned 200; daily sales and orders
   reconciled to their summaries; anonymous access rejected; missing Meta spend is null.
-- Production-build HTTP checks on port 3001: all four tabs rendered; stale-order
-  safeguards held; viewer reads worked and viewer follow-up writes were denied.
+- Production-build HTTP checks on port 3001: all four tabs rendered; provisional-record
+  calculations held; viewer reads worked and viewer follow-up writes were denied.
 - No browser screenshot/responsive visual inspection was performed.
 - Separate dependency checks during Git cleanup: support auth 11 passed; Meta backend
   non-database tests 55 passed; both worktrees passed TypeScript. The full 126-test

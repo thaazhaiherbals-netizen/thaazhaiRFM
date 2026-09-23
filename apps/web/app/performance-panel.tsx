@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import "./performance.css";
 
 type Value = string | number | null;
-type Metric = { current: Value; previous: Value;
+type Metric = { current: Value; previous: Value; provisional?: boolean;
   change: { absolute: Value; percent: Value; state: string } };
 type Day = { day: string; revenue: Value; orders: number };
 type Performance = {
@@ -25,15 +25,15 @@ const fields = [
   ["repeat_revenue", "Returning-customer sales", "money", "Orders after the customer's first purchase date"],
   ["spend", "Meta ad spend", "money", "Unavailable when any selected day is unsynced"],
   ["mer", "Sales per ₹1 of Meta spend", "ratio", "All recorded sales / Meta spend; not profit"],
-  ["spend_per_new_customer", "Meta spend per new customer", "money", "Blended indicator; not attributed or fully loaded CAC"],
+  ["spend_per_new_customer", "New-customer CAC (Meta spend)", "moneyPrecise", "Meta spend / actual new customers from orders; not Meta-reported purchases"],
   ["meta_roas", "Meta-reported ROAS", "ratio", "Meta-attributed purchase value / spend"],
 ];
 function format(value: Value, kind: string, currency = "INR"): string {
   if (value === null) return "—";
   const amount = Number(value);
   if (kind === "ratio") return amount.toFixed(2) + "×";
-  return new Intl.NumberFormat("en-IN", kind === "money"
-    ? { style: "currency", currency, maximumFractionDigits: 0 }
+  return new Intl.NumberFormat("en-IN", (kind === "money" || kind === "moneyPrecise")
+    ? { style: "currency", currency, minimumFractionDigits: kind === "moneyPrecise" ? 2 : 0, maximumFractionDigits: kind === "moneyPrecise" ? 2 : 0 }
     : { maximumFractionDigits: 0 }).format(amount);
 }
 function dateLabel(date: string | null) {
@@ -87,15 +87,21 @@ export async function PerformancePanel({ period, preserved }: {
         const change = metric.change;
         const currency = key === "spend" ? data.meta?.currency || "INR" : "INR";
         const scale = Math.max(Number(metric.current || 0), Number(metric.previous || 0), 1);
+        const noCustomers = key === "spend_per_new_customer" && Number(data.metrics.new_customers.current) === 0;
         return <article className="panel performance-metric" key={key}>
           <h3>{label}</h3><strong className="performance-value">{format(metric.current, kind, currency)}</strong>
           <p>Previous: <b>{format(metric.previous, kind, currency)}</b></p>
+          {noCustomers && <small>No new customers recorded in this period.</small>}
+          {metric.provisional && <small><b>Provisional · based on available order records</b></small>}
+          {key === "spend_per_new_customer" && metric.current !== null && <small>
+            {format(data.metrics.spend.current, "moneyPrecise", currency)} ÷ {format(data.metrics.new_customers.current, "count")} actual new customers
+          </small>}
           <div className="performance-bars" aria-hidden="true">
             <i style={{ width: (Number(metric.current || 0) / scale * 100) + "%" }} />
             <i style={{ width: (Number(metric.previous || 0) / scale * 100) + "%" }} />
           </div>
           <span className="performance-change">{change.state === "unavailable"
-            ? w.partial ? "Provisional · no percentage verdict" : "Comparison unavailable"
+            ? noCustomers ? "CAC cannot be calculated without new customers" : w.partial ? "Provisional · no percentage verdict" : "Comparison unavailable"
             : change.state === "no_baseline" ? "No percentage baseline (previous was zero)"
             : (Number(change.percent) > 0 ? "+" : "") + Number(change.percent).toFixed(1) + "%"}
             {change.absolute !== null && <> · {Number(change.absolute) > 0 ? "+" : ""}

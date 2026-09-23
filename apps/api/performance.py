@@ -104,22 +104,14 @@ def period_values(report: dict, repeat_revenue) -> dict:
 def compare_values(
     current: dict, previous: dict, partial: bool, current_order_gap: bool, previous_order_gap: bool
 ) -> dict:
-    current, previous = dict(current), dict(previous)
-    for values, gap in [(current, current_order_gap), (previous, previous_order_gap)]:
-        if gap:
-            values["mer"] = values["spend_per_new_customer"] = None
+    # Preserve available values; a last-order date is not a completeness watermark.
     return {
         key: {
             "current": value,
             "previous": previous[key],
-            "change": delta(
-                value,
-                previous[key],
-                not partial
-                and (
-                    key in ("spend", "meta_roas") or not (current_order_gap or previous_order_gap)
-                ),
-            ),
+            "provisional": key not in ("spend", "meta_roas")
+            and (current_order_gap or previous_order_gap),
+            "change": delta(value, previous[key], not partial),
         }
         for key, value in current.items()
     }
@@ -130,6 +122,14 @@ def insight_messages(metrics: dict, partial: bool) -> list[str]:
         return [
             "Today's figures are still accumulating. Use Yesterday for a completed-day comparison."
         ]
+    if metrics["revenue"].get("provisional"):
+        return [
+            "Sales, customer counts and blended ratios use available order records. "
+            "They may change when more orders are imported; do not treat these "
+            "provisional changes as confirmed business trends.",
+            "CAC uses Meta spend divided by actual new customers in your order history, "
+            "not Meta-reported purchases. No new customers means CAC is undefined.",
+        ]
     messages = []
     revenue = metrics["revenue"]["change"]
     orders = metrics["orders"]["change"]
@@ -139,10 +139,7 @@ def insight_messages(metrics: dict, partial: bool) -> list[str]:
             f"{orders['percent']:+}% across the matched dates."
         )
     elif revenue["state"] == "unavailable":
-        messages.append(
-            "Order history does not extend through the compared dates. Sales changes and "
-            "blended efficiency are withheld until order coverage is checked."
-        )
+        messages.append("Insufficient values for a sales comparison.")
     elif revenue["state"] == "no_baseline":
         messages.append(
             "The previous period has zero recorded sales; a growth percentage is undefined."
@@ -232,8 +229,8 @@ def performance(period: Period = "week") -> dict:
     if result["order_date_gap"]:
         result["order_note"] += (
             " No orders are recorded through the end of the comparison. "
-            "Sales percentage changes and blended ratios are withheld; "
-            "recorded totals remain visible. A quiet sales day and a missing feed "
+            "Calculations use available records and are provisional; "
+            "they may change as orders arrive. A quiet sales day and a missing feed "
             "cannot be distinguished automatically."
         )
     result.update(

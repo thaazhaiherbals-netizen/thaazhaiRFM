@@ -120,14 +120,43 @@ def test_api_auth_and_period_validation(monkeypatch):
         get_settings.cache_clear()
 
 
-def test_stale_orders_withhold_sales_verdicts_but_keep_meta_comparison():
+def test_older_orders_keep_calculations_with_provisional_label():
     from apps.api.performance import compare_values, insight_messages
 
     current = period_values(report(), 250)
     previous = period_values(report(spend=200), 300)
     metrics = compare_values(current, previous, False, True, False)
-    assert metrics["revenue"]["current"] == 1000
-    assert metrics["revenue"]["change"]["state"] == "unavailable"
-    assert metrics["mer"]["current"] is None
+    assert metrics["revenue"]["change"]["percent"] == 0
+    assert metrics["mer"]["current"] == 10
+    assert metrics["spend_per_new_customer"]["current"] == 50
+    assert metrics["spend_per_new_customer"]["provisional"] is True
+    assert metrics["spend"]["provisional"] is False
     assert metrics["spend"]["change"]["percent"] == -50
-    assert any("Order history" in message for message in insight_messages(metrics, False))
+    assert any("provisional" in message for message in insight_messages(metrics, False))
+
+
+def test_monthly_cac_uses_actual_new_customers_not_meta_purchases():
+    from apps.api.performance import compare_values
+
+    current = report(spend=Decimal("58377.12"))
+    current["business"]["new_customers"] = 127
+    current["meta"]["meta_purchases"] = 183
+    previous = report(spend=Decimal("46754.44"))
+    previous["business"]["new_customers"] = 158
+    metrics = compare_values(
+        period_values(current, 0),
+        period_values(previous, 0),
+        False,
+        True,
+        False,
+    )
+    assert metrics["spend_per_new_customer"]["current"] == Decimal("459.66")
+    assert metrics["spend_per_new_customer"]["previous"] == Decimal("295.91")
+    assert metrics["spend_per_new_customer"]["change"]["state"] == "compared"
+
+
+def test_week_without_new_customers_has_undefined_cac():
+    current = report(spend=Decimal("4067.49"))
+    current["business"]["new_customers"] = 0
+    current["meta"]["meta_purchases"] = 20
+    assert period_values(current, 0)["spend_per_new_customer"] is None
