@@ -84,3 +84,29 @@ export async function saveSegmentSettings(formData: FormData) {
   revalidatePath("/customers");
 }
 
+
+export async function syncMarketing(formData: FormData) {
+  await requireAccess("POST");
+  const dateFrom = String(formData.get("date_from")), dateTo = String(formData.get("date_to"));
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+  if (!isoDate.test(dateFrom) || !isoDate.test(dateTo)) throw new Error("Choose valid dates");
+  let error = "", mode = "inline";
+  try {
+    const result = await api<{ mode: string }>("/admin/marketing/sync", {
+      method: "POST",
+      body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
+    });
+    mode = result.mode;
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : "Sync failed";
+  }
+  revalidatePath("/marketing");
+  // Return to the range being viewed when the sync came from the coverage banner.
+  const viewFrom = String(formData.get("view_from") || ""), viewTo = String(formData.get("view_to") || "");
+  const query = new URLSearchParams({
+    date_from: isoDate.test(viewFrom) ? viewFrom : dateFrom,
+    date_to: isoDate.test(viewTo) ? viewTo : dateTo,
+  });
+  query.set(error ? "sync_error" : "synced", error ? error.slice(0, 300) : mode);
+  redirect(`/marketing?${query}`);
+}

@@ -81,9 +81,19 @@ overlapping lifecycle/value and product-affinity tags. Segment values are dynami
 are not copied onto the customer row. See
 [CUSTOMER_SEGMENTATION.md](CUSTOMER_SEGMENTATION.md) for exact rules and sales actions.
 
-## Planned Meta marketing data
+## Meta marketing data (migration 013)
 
-Meta Ads ingestion is designed but not implemented. The proposed migration 012, raw
-evidence tables, canonical daily ad-level fact, uniqueness rules and access controls are
-specified in [META_MARKETING_INTEGRATION.md](META_MARKETING_INTEGRATION.md). Do not add
-campaign/ad-set/account aggregates to one summable fact: that would double count spend.
+Migration 013 adds `meta_ad_accounts`, `meta_campaigns`, `meta_ad_sets`, `meta_ads`
+(stable Meta IDs; names are mutable labels), `meta_insight_sync_runs` (requested range,
+attribution configuration, API version, counts, normalized vs account-level control
+spend, sanitized error; never the token), append-only `raw_meta_insights` and the
+canonical fact `meta_ad_daily_performance` keyed by account + ad + reporting date +
+attribution key. Money is `NUMERIC`. All seven tables have RLS enabled and
+anon/authenticated access revoked, like migration 005.
+
+A successful run replaces facts for its account, dates and attribution key from that
+run's raw rows in one transaction, so restated or withdrawn rows are reflected while
+raw history is kept. Do not add campaign/ad-set/account aggregates to the fact table:
+that would double count spend. Daily `reach` is not additive across days; reports
+expose its sum only as `reach_daily_sum` / average daily frequency. See
+[META_MARKETING_INTEGRATION.md](META_MARKETING_INTEGRATION.md).

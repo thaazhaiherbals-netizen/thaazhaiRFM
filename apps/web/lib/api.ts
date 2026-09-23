@@ -20,7 +20,13 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     let message = `Request failed (${response.status})`;
     try {
       const body = await response.json();
-      message = body.detail || message;
+      // FastAPI validation errors arrive as a list of {loc, msg} objects.
+      if (Array.isArray(body.detail)) {
+        message = body.detail.map((item: { msg?: string }) =>
+          String(item?.msg || "Invalid request").replace(/^Value error, /, "")).join("; ");
+      } else if (typeof body.detail === "string") {
+        message = body.detail;
+      }
     } catch {}
     throw new Error(message);
   }

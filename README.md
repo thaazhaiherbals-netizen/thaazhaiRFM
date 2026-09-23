@@ -97,25 +97,26 @@ blocked this machine's native psycopg DLL. See docs/VALIDATION.md.
 3. Background worker, job APIs, retries and admin authentication.
 4. Operational UI.
 5. Sales analytics dashboard is implemented; RFM scoring remains planned.
-6. Financial truth: Meta ad spend and Zoho expenses, joined with sales. The Meta
-   implementation handoff is ready; the integration itself is not built.
+6. Financial truth: Meta ad spend and Zoho expenses, joined with sales. Meta Ads
+   reporting is built and running locally against the live account (spend reconciles
+   exactly; not yet in production). Zoho expenses/stock is not built.
 7. Funnel efficiency: Shopify abandoned carts vs. spend vs. orders.
 8. Customer segmentation and bucketing on top of Phase 5's RFM data.
 9. Retention actions: WhatsApp cross-sell/upsell, discounts, calls, feedback.
 10. AI prompt layer over the metrics produced by phases 6-9.
 
-Phases 6-10 are planning only, not yet built. See
+Apart from Meta Ads reporting, phases 6-10 are planning only. See
 [docs/GROWTH_PLATFORM.md](docs/GROWTH_PLATFORM.md) for the layer-by-layer
 rationale and build order.
 
-The next developer can implement Meta reporting from
-[docs/META_MARKETING_INTEGRATION.md](docs/META_MARKETING_INTEGRATION.md). It defines
-required owner inputs, schema, sync flow, metrics, security rules, tests and acceptance
-criteria. Do not add a real Meta token to any committed env file.
+Meta Ads reporting (`/marketing`) is documented in
+[docs/META_MARKETING_INTEGRATION.md](docs/META_MARKETING_INTEGRATION.md): how syncing
+works, the daily scheduler, settings, token setup and troubleshooting. Do not add a
+real Meta token to any committed env file.
 
 For continuation in Claude Code, start with
-[docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md). It records the exact local baseline,
-safe starting work, implementation order and a copyable prompt.
+[docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md). It records the repository state, the
+local baseline, the prioritized next work and a copyable prompt.
 
 The seed catalogue includes 22 products, 25 variants and eight confirmed Hostinger
 aliases. The full historical mapping file still needs verification.
@@ -161,9 +162,10 @@ and recommended outreach order.
 
 The dashboard uses processed local PostgreSQL orders and supports annual, rolling
 three-month and daily month views for revenue, customers and product sales. Customers
-have dynamic opportunity buckets, value/lifecycle/product tags and contact history. Meta spend,
-impressions, clicks and attributed conversions are not yet present. See the Meta handoff
-above before starting Phase 6.
+have dynamic opportunity buckets, value/lifecycle/product tags and contact history.
+`/marketing` shows Meta spend, clicks, Meta-attributed conversions and blended MER/CAC
+against orders. Local data is backfilled from 2026-03-01 and the `meta-scheduler`
+service re-syncs the previous 7 days every morning after 06:00 IST.
 
 ## Team view-only access
 
