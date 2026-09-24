@@ -1,15 +1,20 @@
 # Repository workflow
 
-- Fetch origin and check working-tree status before starting an upgrade.
-- Start independent features from up-to-date origin/main in separate Git worktrees.
-- Never switch branches to carry unrelated uncommitted changes into a new feature.
-- Use codex/ branch names unless the user has chosen a different name.
-- If work depends on an unmerged feature, use an explicitly documented stacked branch
-  from that feature's committed tip. Compare against that tip, not main, during review.
-- Keep commits focused; use conventional commit messages and stage explicit paths or hunks.
-- Review the staged diff and run relevant tests before committing.
-- Never stage secrets, local environments, build output, or another contributor's work.
-- Preserve dirty work before reorganising it. Do not use destructive cleanup to obtain a clean tree.
-- Keep main releasable. Push, PR creation, and merge are separate actions; do not merge
-  into main or deploy merely to simplify local development.
-- Record dependencies, validation, and limitations for reviewers.
+- Permanent branches are develop (integration) and main (production).
+- Fetch origin and check status before starting work. Start each feature or fix on
+  a focused codex/ branch from up-to-date origin/develop, with a clean checkout.
+- Use a temporary worktree only when concurrent work needs isolation. Remove it
+  after merge; do not leave recovery or release branches as permanent workspaces.
+- Delivery path: feature branch -> PR to develop -> PR from develop to main.
+- Never merge feature branches directly into main or commit directly on develop/main.
+- Railway production follows main. Do not deploy feature/develop code directly
+  unless the user explicitly requests an exception.
+- Keep commits focused; stage explicit paths/hunks, review the staged diff, and run
+  relevant checks. Do not stage secrets, build output or unrelated edits.
+- Preserve and reconcile uncommitted work before cleanup; never carry mixed changes
+  into a new feature branch. Keep recovery copies outside active branches.
+- After feature merge, delete its local/remote branch and temporary worktree once
+  its changes are verified included. Keep develop and main.
+- After a release, synchronize develop with main through a normal fast-forward or
+  PR as appropriate; never force-push shared branches.
+- Record scope, validation and limitations for reviewers.
