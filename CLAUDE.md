@@ -4,18 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Current continuation point:** read
 [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) before changing code. It records the
-repository/branch state (uncommitted work to separate first), the implemented baseline,
+repository/branch state (release merged in main through PR #1), the implemented baseline,
 the prioritized next work and a copyable start prompt.
 
-**Branching rule:** every upgrade starts on a new feature branch from an up-to-date
-`main`. Never commit feature work directly to `main`.
+**Branching rule:** start every feature/fix on a clean `codex/` branch from updated
+`origin/develop`. Open its PR into `develop`, then release through a PR from `develop`
+to `main`. Railway production deploys `main`. Keep only `develop` and `main` as
+permanent branches; delete merged feature branches and temporary worktrees.
+See AGENTS.md for the complete workflow.
 
 ## What this is
 
 Thaazhai operations + analytics: an internal admin app for raw-order processing,
-customers, orders and analytics. Render hosts three services from this one repo:
+customers, orders and analytics. Railway hosts the application services from this repo:
 Next.js (`apps/web`), FastAPI (`apps/api`), and a Python worker
-(`workers/order_processor`). Supabase PostgreSQL is the source of truth **and**
+(`workers/order_processor`), plus a separate Meta scheduler (`workers/meta_sync`).
+Supabase PostgreSQL is the current application database **and**
 the durable job queue — there is no Redis, broker, Kubernetes, or AI layer.
 
 Read [README.md](README.md) and `docs/` before making non-trivial changes — this
@@ -44,7 +48,7 @@ project has a lot of load-bearing decisions documented there. In particular:
 | | Local development | Live production |
 |---|---|---|
 | Database | PostgreSQL in Docker on your machine | Existing Supabase database |
-| Backend settings | Root `.env.local` | Render variables / root `.env.production` |
+| Backend settings | Root `.env.local` | Railway variables / root `.env.production` |
 | Selection | Default: `APP_ENV=development` | Explicit: `APP_ENV=production` |
 
 The same application code runs in both; only settings differ. The legacy shared
@@ -189,15 +193,9 @@ are mapped by first-present priority lists in `parser.py` — never sum overlapp
 - **Backend**: `ADMIN_API_TOKEN`, checked by `apps/api/auth.py:require_admin` via
   `HTTPBearer` on every `/admin/*`, `/orders*`, `/customers*` route. Fails closed
   (503) if unset, constant-time compared.
-- **Frontend session**: a *different* cookie-based login in
-  `apps/web/app/api/login/route.ts` — the operator pastes the same
-  `ADMIN_API_TOKEN` into the login form, but once verified the browser gets an
-  HTTP-only `thaazhai_admin` cookie derived from a separate `ADMIN_UI_SESSION`
-  secret (SHA-256'd, 8-hour maxAge, `secure` in production), not the admin token
-  itself. Next.js server routes/components hold `ADMIN_API_TOKEN` server-side to
-  call the FastAPI backend; the browser never sees it. Both `ADMIN_API_TOKEN` and
-  `ADMIN_UI_SESSION` must be set for login to work locally — check
-  `apps/web/.env.local` if login 503s.
+- **Frontend session**: login validates the configured role token and issues an
+  HTTP-only signed `thaazhai_session` cookie (8 hours, secure in production),
+  using `ADMIN_UI_SESSION`. Backend credentials stay on the server.
 - **Web roles** (`apps/web/lib/session.ts`, `docs/TEAM_ACCESS.md`): the login form
   also accepts `VIEWER_UI_TOKEN` (read-only everywhere) and `SUPPORT_UI_TOKEN`
   (customers/orders/follow-ups only). The signed session cookie is `thaazhai_session`;
@@ -227,7 +225,7 @@ endpoints stay public. Never put this token in a `NEXT_PUBLIC_*` variable.
 `APP_ENV` (from the process environment, default `development`) picks which env
 file loads — `.env.local` for development, `.env.production` for production,
 none for `test`. A file can never change `APP_ENV` itself, and process-level env
-vars always override the file (matches how Render injects secrets). Settings are
+vars always override the file (matches how Railway injects secrets). Settings are
 cached via `lru_cache`, so **restart the process** after changing env values —
 edits won't be picked up live.
 
@@ -248,8 +246,21 @@ haven't verified against this version.
   runner (`db/migrate.py`) — never edit an already-applied migration file; add a new one.
   Migrations 001-013 are applied locally: 010 customer follow-ups, 011 dynamic customer
   analysis, 012 customer sales configuration, 013 Meta marketing tables. Migration 013
-  is **not** on Supabase yet. The next new migration is 014.
+  is applied on Supabase. Its new migration ledger records only 013; older schema
+  already exists without ledger entries. Do not blindly rerun earlier SQL. The next new migration is 014.
 - `db/seeds/*.sql` preserve existing master rows; they don't silently repair
   conflicts or overwrite metadata on rerun.
 - Alias matching normalizes case/whitespace/HTML entities but never guesses or
   invents an alias — ambiguous matches must be resolved by an admin, not the code.
+
+## Current release and Zoho direction
+
+Meta, support access, comparisons and the available-record CAC fix are merged in main
+(PR #1, cbf5178). See docs/RAILWAY_RELEASE.md for completed production operations and
+checks still awaiting verification. Do not repeat the old feature-separation task.
+
+The original folder is the clean main checkout after repository cleanup. Recovery
+files are archived under .git/codex-recovery, not kept on an active branch. Start
+new work on a feature branch from origin/develop. The business wants Zoho to supply website and WhatsApp orders as the single
+order source. This integration is not implemented; the Zoho app and records must be
+identified and reconciled before cutover. Meta remains the ad-spend source.
