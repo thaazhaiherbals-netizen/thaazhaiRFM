@@ -17,6 +17,20 @@ from apps.api.jobs import JobConflict, RecordNotRetryable, enqueue_job
 router = APIRouter(dependencies=[Depends(require_admin)], tags=["Operations"])
 
 
+class SummaryPage(Page):
+    summary: dict
+
+
+def summarized_page(sql: str, params: dict, limit: int, offset: int, aggregates: str) -> SummaryPage:
+    with get_engine().connect() as connection:
+        summary = dict(connection.execute(
+            text(f"SELECT count(*) AS total, {aggregates} FROM ({sql}) filtered"), params
+        ).mappings().one())
+        items = connection.execute(text(sql + " LIMIT :limit OFFSET :offset"),
+                                   {**params, "limit": limit, "offset": offset}).mappings().all()
+        return SummaryPage(items=[dict(row) for row in items], total=summary["total"], summary=summary)
+
+
 class DateCorrection(BaseModel):
     order_date: date
     reason: str = Field(min_length=5, max_length=500)
@@ -322,14 +336,18 @@ def analytics(
         }
 
 
-@router.get("/orders", response_model=Page)
+@router.get("/orders", response_model=SummaryPage)
 def orders(
     search: str | None = Query(None, max_length=150),
+    start_date: date | None = None,
+    end_date: date | None = None,
     sort: Literal["order_date", "order_value", "item_count", "customer_name"] = "order_date",
     direction: Literal["asc", "desc"] = "desc",
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Page:
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(422, "Start date must be on or before end date")
     order_by = {
         "order_date": "o.order_date",
         "order_value": "o.order_value",
@@ -344,7 +362,7 @@ def orders(
             count(i.id) FILTER (WHERE i.mapping_status = 'PENDING') AS pending_items
         FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
         LEFT JOIN order_items i ON i.order_id = o.id
-        WHERE CAST(:search AS TEXT) IS NULL
+        WHERE (CAST(:search AS TEXT) IS NULL
            OR o.source_record_id ILIKE '%' || :search || '%'
            OR COALESCE(c.customer_name, '') ILIKE '%' || :search || '%'
            OR COALESCE(c.normalized_phone, '') ILIKE '%' || :search || '%'
@@ -359,10 +377,44 @@ def orders(
                    OR COALESCE(sv.variant_name, '') ILIKE '%' || :search || '%'
                )
            )
+        )
+        AND (CAST(:start_date AS DATE) IS NULL OR o.order_date >= :start_date)
+        AND (CAST(:end_date AS DATE) IS NULL OR o.order_date <= :end_date)
         GROUP BY o.id, c.id
         ORDER BY {order_by} {direction.upper()}, o.id
     """
-    return paged(sql, {"search": search}, limit, offset)
+    return summarized_page(sql, {"search": search, "start_date": start_date, "end_date": end_date}, limit, offset,
+                           "COALESCE(sum(order_value), 0) AS revenue, COALESCE(avg(order_value), 0) AS average_order_value, "
+                           "count(DISTINCT customer_id) AS customers, COALESCE(sum(item_count), 0) AS line_items")
+
+
+@router.get("/admin/support-summary")
+def support_summary() -> dict:
+    with get_engine().connect() as connection:
+        result = connection.execute(text("""
+            WITH bounds AS (
+                SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today
+            ), daily AS (
+                SELECT f.* FROM customer_follow_ups f CROSS JOIN bounds b
+                WHERE f.contacted_at >= b.today::timestamp AT TIME ZONE 'Asia/Kolkata'
+                  AND f.contacted_at < (b.today + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+            ), latest AS (
+                SELECT DISTINCT ON (customer_id) * FROM customer_follow_ups
+                ORDER BY customer_id, contacted_at DESC, id DESC
+            )
+            SELECT b.today,
+                (SELECT count(DISTINCT customer_id) FROM daily
+                 WHERE status <> 'NO_ANSWER') AS contacted,
+                (SELECT count(*) FROM daily WHERE sentiment = 'POSITIVE') AS positive,
+                (SELECT count(*) FROM daily WHERE sentiment = 'NEGATIVE') AS negative,
+                (SELECT count(*) FROM latest
+                 WHERE status <> 'DO_NOT_CONTACT'
+                   AND next_follow_up_at >= b.today::timestamp AT TIME ZONE 'Asia/Kolkata'
+                   AND next_follow_up_at < (b.today + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+                ) AS scheduled
+            FROM bounds b
+        """)).mappings().one()
+        return dict(result)
 
 
 @router.get("/orders/{order_id}")
@@ -492,9 +544,13 @@ def customer_segments() -> dict:
         }
 
 
-@router.get("/customers", response_model=Page)
+@router.get("/customers", response_model=SummaryPage)
 def customers(
     search: str | None = Query(None, max_length=150),
+    product_search: str | None = Query(None, max_length=150),
+    product_ids: str | None = Query(None, max_length=200),
+    min_product_orders: int = Query(2, ge=1, le=100),
+    product_match: Literal["any", "all"] = "any",
     segment: CustomerSegment | None = None,
     tag: CustomerTag | None = None,
     sales_signal: Literal["HIGH_INTENT", "OFFER_INTEREST", "CONCERNS", "PRICE_HIGH"]
@@ -524,6 +580,17 @@ def customers(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Page:
+    product_terms = list(dict.fromkeys(term.strip().lower() for term in (product_search or "").split(",") if term.strip()))
+    try:
+        selected_ids = list(dict.fromkeys(str(UUID(value.strip())) for value in (product_ids or "").split(",") if value.strip()))
+    except ValueError:
+        raise HTTPException(422, "Select valid catalogue products")
+    if len(selected_ids) > 5:
+        raise HTTPException(422, "Choose up to five catalogue products")
+    if selected_ids:
+        product_terms = []
+    if len(product_terms) > 5:
+        raise HTTPException(422, "Choose up to five product names separated by commas")
     order_by = {
         "last_order_date": "ca.last_order_date",
         "first_order_date": "ca.first_order_date",
@@ -536,6 +603,24 @@ def customers(
         "next_follow_up_at": "lf.next_follow_up_at",
     }[sort]
     sql = f"""
+        WITH product_matches AS (
+            SELECT o.customer_id, term, count(DISTINCT o.id) AS purchase_orders,
+                max(o.order_date) AS last_purchase
+            FROM orders o JOIN order_items i ON i.order_id = o.id
+            LEFT JOIN products p ON p.id = i.product_id
+            LEFT JOIN product_variants v ON v.id = i.variant_id
+            CROSS JOIN (
+                SELECT id AS selected_id, canonical_name AS term FROM products
+                WHERE id::text = ANY(CAST(:product_ids AS TEXT[]))
+                UNION ALL SELECT NULL::uuid, term FROM unnest(CAST(:product_terms AS TEXT[])) AS term
+            ) selected
+            WHERE (selected_id IS NOT NULL AND i.product_id = selected_id)
+               OR (selected_id IS NULL AND (strpos(lower(COALESCE(p.canonical_name, '')), term) > 0
+               OR strpos(lower(COALESCE(i.raw_product_name, '')), term) > 0
+               OR strpos(lower(COALESCE(v.variant_name, '')), term) > 0
+               OR strpos(lower(COALESCE(i.raw_variant_name, '')), term) > 0))
+            GROUP BY o.customer_id, term
+        )
         SELECT c.id, c.customer_name, c.normalized_phone, c.email,
             ca.first_order_date, ca.last_order_date, ca.order_count,
             ca.lifetime_value, ca.average_order_value, ca.recency_days,
@@ -546,9 +631,16 @@ def customers(
             lf.sentiment AS latest_sentiment, lf.feedback_tags AS latest_feedback_tags,
             lf.purchase_intent AS latest_purchase_intent,
             lf.offer_interest AS latest_offer_interest,
-            lf.expected_order_date AS latest_expected_order_date
+            lf.expected_order_date AS latest_expected_order_date,
+            COALESCE(pm.product_purchases, '[]'::jsonb) AS product_purchases
         FROM customers c
         JOIN customer_analysis ca ON ca.customer_id = c.id
+        LEFT JOIN LATERAL (
+            SELECT count(*) FILTER (WHERE purchase_orders >= :min_product_orders) AS qualified_terms,
+                jsonb_agg(jsonb_build_object('product', term, 'orders', purchase_orders,
+                    'last_purchase', last_purchase) ORDER BY term) AS product_purchases
+            FROM product_matches WHERE customer_id = c.id
+        ) pm ON TRUE
         LEFT JOIN LATERAL (
             SELECT id, status, channel, contacted_by, contacted_at, next_follow_up_at,
                 sentiment, feedback_tags, purchase_intent, offer_interest,
@@ -574,7 +666,10 @@ def customers(
                    OR COALESCE(sv.variant_name, '') ILIKE '%' || :search || '%'
                )
            )
-        ) AND (
+        ) AND (:product_count = 0
+            OR (:product_match = 'any' AND pm.qualified_terms > 0)
+            OR (:product_match = 'all' AND pm.qualified_terms = :product_count))
+        AND (
             CAST(:follow_up_status AS TEXT) IS NULL
             OR (:follow_up_status = 'NOT_CONTACTED' AND lf.id IS NULL)
             OR lf.status = :follow_up_status
@@ -589,7 +684,7 @@ def customers(
           )
         ORDER BY {order_by} {direction.upper()} NULLS LAST, c.id
     """
-    return paged(
+    return summarized_page(
         sql,
         {
             "search": search,
@@ -597,10 +692,99 @@ def customers(
             "segment": segment,
             "tag": tag,
             "sales_signal": sales_signal,
+            "product_terms": product_terms,
+            "product_ids": selected_ids,
+            "product_count": len(selected_ids) or len(product_terms),
+            "min_product_orders": min_product_orders,
+            "product_match": product_match,
         },
         limit,
         offset,
+        "count(*) FILTER (WHERE order_count > 1) AS repeat_customers, "
+        "COALESCE(sum(lifetime_value), 0) AS lifetime_value, COALESCE(sum(order_count), 0) AS orders, "
+        "COALESCE(avg(lifetime_value), 0) AS average_customer_value",
     )
+
+
+@router.get("/admin/product-options")
+def product_options() -> list[dict]:
+    with get_engine().connect() as connection:
+        return [dict(row) for row in connection.execute(text(
+            "SELECT id, canonical_name AS name FROM products ORDER BY canonical_name, id"
+        )).mappings()]
+
+
+@router.get("/admin/product-opportunities", response_model=SummaryPage)
+def product_opportunities(
+    product_a: str = Query(..., min_length=2, max_length=150),
+    product_b: str = Query(..., min_length=2, max_length=150),
+    combo: str = Query("", max_length=150),
+    mode: Literal["combo", "cross_sell"] = "combo",
+    search: str | None = Query(None, max_length=150),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> SummaryPage:
+    a, b, excluded = product_a.strip().lower(), product_b.strip().lower(), combo.strip().lower()
+    def catalogue_id(value: str) -> str | None:
+        try:
+            return str(UUID(value))
+        except ValueError:
+            return None
+    a_id, b_id, combo_id = catalogue_id(a), catalogue_id(b), catalogue_id(excluded)
+    if len(a) < 2 or len(b) < 2 or a == b:
+        raise HTTPException(422, "Choose two different product names, each at least two characters")
+    sql = """
+        WITH lines AS (
+            SELECT o.customer_id, o.id AS order_id, o.order_date, i.product_id::text AS product_id,
+                lower(concat_ws(' ', p.canonical_name, i.raw_product_name, v.variant_name, i.raw_variant_name)) AS names
+            FROM orders o JOIN order_items i ON i.order_id = o.id
+            LEFT JOIN products p ON p.id = i.product_id
+            LEFT JOIN product_variants v ON v.id = i.variant_id
+        ), hits AS (
+            SELECT *, CASE WHEN CAST(:a_id AS TEXT) IS NOT NULL THEN product_id = :a_id ELSE strpos(names, :a) > 0 END AS bought_a,
+                CASE WHEN CAST(:b_id AS TEXT) IS NOT NULL THEN product_id = :b_id ELSE strpos(names, :b) > 0 END AS bought_b,
+                CASE WHEN CAST(:combo_id AS TEXT) IS NOT NULL THEN product_id = :combo_id ELSE (:combo <> '' AND strpos(names, :combo) > 0) END AS bought_combo FROM lines
+        ), behavior AS (
+            SELECT customer_id,
+                count(DISTINCT order_id) FILTER (WHERE bought_a AND NOT bought_b AND NOT bought_combo) AS a_orders,
+                count(DISTINCT order_id) FILTER (WHERE bought_b AND NOT bought_a AND NOT bought_combo) AS b_orders,
+                max(order_date) FILTER (WHERE bought_a AND NOT bought_b AND NOT bought_combo) AS a_last,
+                max(order_date) FILTER (WHERE bought_b AND NOT bought_a AND NOT bought_combo) AS b_last,
+                bool_or(bought_b) AS ever_bought_b, bool_or(bought_combo) AS ever_bought_combo
+            FROM hits GROUP BY customer_id
+        )
+        SELECT c.id, c.customer_name, c.normalized_phone, c.email,
+            ca.lifetime_value, ca.order_count, ca.last_order_date,
+            ca.first_order_date, ca.average_order_value, ca.recency_days, ca.segment, ca.tags,
+            COALESCE(latest.status, 'NOT_CONTACTED') AS follow_up_status,
+            latest.channel AS follow_up_channel, latest.contacted_by AS last_follow_up_by,
+            latest.contacted_at AS last_follow_up_at, latest.next_follow_up_at,
+            latest.sentiment AS latest_sentiment, latest.purchase_intent AS latest_purchase_intent,
+            latest.offer_interest AS latest_offer_interest, latest.feedback_tags AS latest_feedback_tags,
+            latest.expected_order_date AS latest_expected_order_date,
+            h.a_orders, h.b_orders, h.a_last, h.b_last
+        FROM behavior h JOIN customers c ON c.id = h.customer_id
+        JOIN customer_analysis ca ON ca.customer_id = c.id
+        LEFT JOIN LATERAL (SELECT * FROM customer_follow_ups WHERE customer_id = c.id
+            ORDER BY contacted_at DESC, id DESC LIMIT 1) latest ON TRUE
+        WHERE h.a_orders > 0 AND NOT h.ever_bought_combo
+          AND COALESCE(latest.status, '') <> 'DO_NOT_CONTACT'
+          AND ((:mode = 'cross_sell' AND NOT h.ever_bought_b)
+            OR (:mode = 'combo' AND h.b_orders > 0 AND EXISTS (
+                SELECT 1 FROM hits ha JOIN hits hb ON hb.customer_id = ha.customer_id
+                WHERE ha.customer_id = c.id AND ha.order_id <> hb.order_id
+                  AND ha.bought_a AND NOT ha.bought_b AND NOT ha.bought_combo
+                  AND hb.bought_b AND NOT hb.bought_a AND NOT hb.bought_combo
+            )))
+          AND (CAST(:search AS TEXT) IS NULL OR strpos(lower(concat_ws(' ', c.customer_name,
+              c.normalized_phone, c.email)), lower(:search)) > 0)
+        ORDER BY ca.last_order_date DESC, ca.lifetime_value DESC, c.id
+    """
+    return summarized_page(sql, {"a": a, "b": b, "combo": excluded, "a_id": a_id, "b_id": b_id,
+                               "combo_id": combo_id, "mode": mode, "search": search},
+                           limit, offset, "COALESCE(sum(lifetime_value), 0) AS lifetime_value, "
+                           "count(*) FILTER (WHERE a_orders >= 2) AS repeat_a, "
+                           "COALESCE(sum(a_orders), 0) AS a_orders")
 
 
 @router.get("/customers/{customer_id}")

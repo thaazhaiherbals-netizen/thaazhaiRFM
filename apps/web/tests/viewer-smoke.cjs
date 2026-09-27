@@ -8,12 +8,15 @@ const root = path.resolve(__dirname, "..");
 let writes = 0;
 const customer = {id:"c1",customer_name:"Sample customer",order_count:1,lifetime_value:"500",average_order_value:"500",recency_days:2,segment:"NEW_CUSTOMER",tags:[],follow_up_status:"NOT_CONTACTED"};
 const fixtures = {
+ "/admin/support-summary":{today:"2026-09-27",contacted:2,positive:1,negative:0,scheduled:3},
  "/admin/ingestion/summary":{NEW:1,PROCESSING:0,PROCESSED:0,ERROR:1,pending_mapping_items:1},
  "/admin/ingestion":{items:[{id:"r1",source_record_id:"demo",source_system:"HOSTINGER",status:"ERROR",retry_count:0,ingested_at:"2026-09-22",error_message:"order_date is required"}],total:1},
  "/admin/unmapped-products":{items:[{source_system:"HOSTINGER",raw_product_name:"Sample soap",affected_items:1,affected_orders:1,item_revenue:"100",mapping_error:"No match"}],total:1},
  "/admin/products":{items:[],total:0},
  "/admin/customers/c1/follow-ups":{id:"f1"},
- "/customers":{items:[customer],total:1},
+ "/customers":{items:[customer],total:1,summary:{repeat_customers:0,lifetime_value:"500",orders:1}},
+ "/admin/product-options":[{id:"11111111-1111-4111-8111-111111111111",name:"Aloe Gel"},{id:"22222222-2222-4222-8222-222222222222",name:"Hair Colour"}],
+ "/admin/product-opportunities":{items:[{...customer,a_orders:2,b_orders:1,a_last:"2026-09-01",b_last:"2026-08-01"}],total:1,summary:{lifetime_value:"500",repeat_a:1,a_orders:2}},
  "/admin/customer-segments":{segments:[],thresholds:{high_value:"500",vip_value:"1000",latest_order_date:"2026-09-22"},settings:{new_customer_days:30,active_customer_days:90,champion_recency_days:60,champion_min_orders:3,high_value_percentile:".75",vip_value_percentile:".9"}},
  "/customers/c1":{customer,orders:[],follow_ups:[]},
 };
@@ -78,6 +81,18 @@ const fixtures = {
   assert.equal(customerRes.status,200);
   const supportHtml=(await customerRes.text()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,"");
   assert.ok(supportHtml.includes("Customer support access"));
+  assert.ok(supportHtml.includes("People contacted"));
+  assert.ok(supportHtml.includes("Scheduled for today"));
+  assert.ok(supportHtml.includes("Customer follow-up"));
+  assert.ok(supportHtml.includes("Product purchase behaviour"));
+  const opportunities = await fetch(base+"/customers/opportunities?product_a=11111111-1111-4111-8111-111111111111&product_b=22222222-2222-4222-8222-222222222222",{headers:{cookie:support}});
+  assert.equal(opportunities.status,200);
+  const opportunitiesHtml = await opportunities.text();
+  assert.ok(opportunitiesHtml.includes("Upsell audience"));
+  assert.ok(opportunitiesHtml.includes('name="product_a"'));
+  assert.ok(opportunitiesHtml.includes("product_ids="));
+  assert.ok(opportunitiesHtml.includes("Customer follow-up"));
+  assert.ok(opportunitiesHtml.includes("View orders"));
   assert.ok(!supportHtml.includes("Save group rules"));
   for (const href of ["/ingestion", "/jobs", "/mappings", "/orders"])
     assert.ok(!supportHtml.includes('href="'+href+'"'));

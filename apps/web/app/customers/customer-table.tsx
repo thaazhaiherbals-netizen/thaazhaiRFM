@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect, useRef, ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 
 export type FollowUpStatus = "NOT_CONTACTED" | "CONTACTED" | "NO_ANSWER" | "CALLBACK" |
   "INTERESTED" | "NOT_INTERESTED" | "DO_NOT_CONTACT";
@@ -16,16 +18,17 @@ export type Customer = {
   latest_sentiment?: string; latest_feedback_tags?: string[];
   latest_purchase_intent?: string; latest_offer_interest?: boolean;
   latest_expected_order_date?: string;
+  product_purchases?: { product: string; orders: number; last_purchase: string }[];
 };
 type Order = {
   id: string; source_record_id: string; order_date: string; order_value: string;
   payment_method?: string; delivery_city?: string; delivery_pincode?: string;
 };
-type Item = {
-  id: string; raw_product_name: string; raw_variant_name?: string; canonical_name?: string;
-  variant_name?: string; quantity: number; unit_price: string; line_total: string;
-  mapping_status: string;
-};
+type OrderDetail = { order: Order; items: {
+  id: string; raw_product_name: string; raw_variant_name?: string;
+  canonical_name?: string; variant_name?: string; quantity: number;
+  unit_price: string; line_total: string;
+}[] };
 type FollowUp = {
   id: string; customer_id: string; status: FollowUpStatus; channel: string;
   contacted_by: string; sentiment: string; feedback_tags: string[];
@@ -33,7 +36,6 @@ type FollowUp = {
   notes?: string; contacted_at: string; next_follow_up_at?: string;
 };
 type CustomerDetail = { customer: Customer; orders: Order[]; follow_ups: FollowUp[] };
-type OrderDetail = { order: Order; items: Item[] };
 
 const segmentLabels: Record<CustomerSegment, string> = {
   CHAMPIONS: "Best repeat customers", LOYAL_REPEAT: "Regular repeat customers",
@@ -79,11 +81,14 @@ const formatDateTime = (value?: string) => value
   : "";
 
 export function CustomerTable({ customers, sort, direction, search, followUpStatus,
-  segment, tag, salesSignal, canWrite }: {
+  segment, tag, salesSignal, canWrite, productSearch, minProductOrders, productMatch, sortable = true }: {
   canWrite: boolean;
   customers: Customer[]; sort: string; direction: string; search: string;
   followUpStatus: string; segment: string; tag: string; salesSignal: string;
+  productSearch: string; minProductOrders: string; productMatch: string;
+  sortable?: boolean;
 }) {
+  const router = useRouter();
   function sortHref(column: string) {
     const query = new URLSearchParams({
       sort: column,
@@ -94,17 +99,19 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
     if (segment) query.set("segment", segment);
     if (tag) query.set("tag", tag);
     if (salesSignal) query.set("sales_signal", salesSignal);
+    if (productSearch) {
+      query.set("product_ids", productSearch); query.set("min_product_orders", minProductOrders); query.set("product_match", productMatch);
+    }
     return `/customers?${query.toString()}`;
   }
   function sortLabel(label: string, column: string) {
+    if (!sortable) return label;
     const marker = sort === column ? (direction === "asc" ? " \u2191" : " \u2193") : " \u2195";
     return <a className={`sort-link ${sort === column ? "active" : ""}`}
       href={sortHref(column)}>{label}{marker}</a>;
   }
   const [openCustomer, setOpenCustomer] = useState<string>();
-  const [openOrder, setOpenOrder] = useState<string>();
   const [customerDetails, setCustomerDetails] = useState<Record<string, CustomerDetail>>({});
-  const [orderDetails, setOrderDetails] = useState<Record<string, OrderDetail>>({});
   const [followUpOverrides, setFollowUpOverrides] = useState<Record<string, Partial<Customer>>>({});
   const [loading, setLoading] = useState<string>();
   const [saving, setSaving] = useState<string>();
@@ -113,9 +120,9 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
 
   async function loadCustomer(id: string) {
     if (openCustomer === id) {
-      setOpenCustomer(undefined); setOpenOrder(undefined); return;
+      setOpenCustomer(undefined); return;
     }
-    setOpenCustomer(id); setOpenOrder(undefined); setError(undefined); setNotice(undefined);
+    setOpenCustomer(id); setError(undefined); setNotice(undefined);
     if (customerDetails[id]) return;
     setLoading(`customer:${id}`);
     try {
@@ -125,21 +132,6 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
       setCustomerDetails(current => ({ ...current, [id]: result }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load customer");
-    } finally { setLoading(undefined); }
-  }
-
-  async function loadOrder(id: string) {
-    if (openOrder === id) { setOpenOrder(undefined); return; }
-    setOpenOrder(id); setError(undefined);
-    if (orderDetails[id]) return;
-    setLoading(`order:${id}`);
-    try {
-      const response = await fetch(`/api/orders/${id}`);
-      if (!response.ok) throw new Error("Could not load this order's details");
-      const result: OrderDetail = await response.json();
-      setOrderDetails(current => ({ ...current, [id]: result }));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not load order details");
     } finally { setLoading(undefined); }
   }
 
@@ -192,6 +184,7 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
         } : current;
       });
       setNotice("Follow-up saved. The team can now see this contact.");
+      router.refresh();
       return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save follow-up");
@@ -207,35 +200,44 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
       <th>{sortLabel("Orders", "order_count")}</th>
       <th>{sortLabel("Lifetime value", "lifetime_value")}</th>
       <th>{sortLabel("Follow-up", "last_follow_up_at")}</th></tr></thead>
-    <tbody>{customers.map((baseCustomer, index) => {
+    <tbody>{!customers.length && <tr><td colSpan={9}>No customers match these filters. Try a broader product name or a lower purchase threshold.</td></tr>}{customers.map((baseCustomer, index) => {
       const customer = { ...baseCustomer, ...followUpOverrides[baseCustomer.id] };
       const expanded = openCustomer === customer.id;
       const detail = customerDetails[customer.id];
       return <CustomerRows canWrite={canWrite} key={customer.id} customer={customer} expanded={expanded}
-        tone={index % 2} detail={detail} openOrder={openOrder} orderDetails={orderDetails}
+        tone={index % 2} detail={detail}
         loading={loading} saving={saving === customer.id}
         error={expanded ? error : undefined} notice={expanded ? notice : undefined}
-        toggleCustomer={() => loadCustomer(customer.id)} toggleOrder={loadOrder}
+        toggleCustomer={() => loadCustomer(customer.id)}
         saveFollowUp={formData => saveFollowUp(customer.id, formData)} />;
     })}</tbody>
   </table></section>;
 }
 
-function CustomerRows({ customer, expanded, tone, detail, openOrder, orderDetails, loading,
-  saving, error, notice, toggleCustomer, toggleOrder, saveFollowUp, canWrite }: {
+function CustomerRows({ customer, expanded, tone, detail, loading,
+  saving, error, notice, toggleCustomer, saveFollowUp, canWrite }: {
   canWrite: boolean;
-  customer: Customer; expanded: boolean; tone: number; detail?: CustomerDetail; openOrder?: string;
-  orderDetails: Record<string, OrderDetail>; loading?: string; saving: boolean;
+  customer: Customer; expanded: boolean; tone: number; detail?: CustomerDetail;
+  loading?: string; saving: boolean;
   error?: string; notice?: string; toggleCustomer: () => void;
-  toggleOrder: (id: string) => void; saveFollowUp: (data: FormData) => Promise<boolean>;
+  saveFollowUp: (data: FormData) => Promise<boolean>;
 }) {
+  const [ordersExpanded, setOrdersExpanded] = useState(false);
   return <>
-    <tr className={`expandable-row customer-band-${tone} ${expanded ? "expanded" : ""}`}>
-      <td><button className="chevron" onClick={toggleCustomer} aria-expanded={expanded}
-        aria-label={`${expanded ? "Collapse" : "Expand"} ${customer.customer_name || "customer"}`}>
-        {expanded ? "\u2212" : "+"}</button></td>
-      <td><button className="row-button" onClick={toggleCustomer}>
-        {customer.customer_name || "Unknown"}</button><small>{customer.email}</small></td>
+    <tr className={`expandable-row customer-band-${tone} ${ordersExpanded ? "expanded" : ""}`}
+      onClick={event => {
+        if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+        setOrdersExpanded(value => !value);
+      }}>
+      <td><button className="button primary feedback-action" onClick={event => { event.stopPropagation(); toggleCustomer(); }} aria-haspopup="dialog"
+        aria-label={`Customer follow-up for ${customer.customer_name || "customer"}`}>
+        {canWrite ? "Customer follow-up" : "View follow-ups"}</button></td>
+      <td><button className="row-button customer-orders-toggle" onClick={() => setOrdersExpanded(value => !value)}
+        aria-expanded={ordersExpanded} aria-controls={`customer-orders-${customer.id}`}>
+        <span aria-hidden="true">{ordersExpanded ? "−" : "+"} </span>{customer.customer_name || "Unknown"}
+        <small>{ordersExpanded ? "Hide orders" : "View orders"}</small></button><small>{customer.email}</small>
+        {customer.product_purchases?.map(purchase => <small className="purchase-evidence" key={purchase.product}>
+          <strong>{purchase.product}: {purchase.orders} orders</strong>{purchase.orders > 0 ? ` · Last: ${purchase.last_purchase}` : " · Not purchased"}</small>)}</td>
       <td><SegmentBadge customer={customer} /></td>
       <td>{customer.normalized_phone}</td><td>{customer.first_order_date}</td>
       <td>{customer.last_order_date}</td><td><span className="count-badge">
@@ -243,36 +245,23 @@ function CustomerRows({ customer, expanded, tone, detail, openOrder, orderDetail
       <td><strong className="money-highlight">{money(customer.lifetime_value)}</strong></td>
       <td><FollowUpBadge customer={customer} /></td>
     </tr>
-    {expanded && <tr className={`expansion-row customer-band-${tone}`}><td colSpan={9}>
-      <div className="expansion-panel">
+    {ordersExpanded && <tr className="customer-orders-expansion"><td colSpan={9}>
+      <div className="customer-orders-inline" id={`customer-orders-${customer.id}`}>
+        <CustomerOrderHistory customerId={customer.id} cached={detail} />
+      </div>
+    </td></tr>}
+    {expanded && <FeedbackDialog name={customer.customer_name || "Customer"}
+      phone={customer.normalized_phone} onClose={toggleCustomer} saving={saving}>
+      <div className="feedback-workspace">
         {loading === `customer:${customer.id}` && <p>Loading customer details...</p>}
-        {error && <div className="alert error">{error}</div>}
-        {notice && <div className="alert success">{notice}</div>}
+        {error && <div className="alert error" role="alert">{error}. Please try again; your form entries are preserved.</div>}
+        {notice && <div className="alert success" role="status">{notice}</div>}
         {detail && <>
-          <section className="customer-orders-block">
-            <div className="block-heading"><div><span>Purchase history</span>
-              <h3>All customer orders</h3></div>
-              <strong>{detail.orders.length} order{detail.orders.length === 1 ? "" : "s"}</strong>
-            </div>
-            <div className="order-stack">
-              {detail.orders.map((order, index) => <div
-                className={`nested-order order-tone-${index % 3} ${openOrder === order.id ? "open" : ""}`}
-                key={order.id}>
-                <button className="order-summary" onClick={() => toggleOrder(order.id)}
-                  aria-expanded={openOrder === order.id}>
-                  <span className="chevron">{openOrder === order.id ? "\u2212" : "+"}</span>
-                  <strong className="order-id">#{order.source_record_id}</strong>
-                  <span>{order.order_date}</span>
-                  <span>{order.payment_method || "Payment unknown"}</span>
-                  <span>{order.delivery_city || order.delivery_pincode || "Location unknown"}</span>
-                  <strong className="nested-amount">{money(order.order_value)}</strong>
-                </button>
-                {openOrder === order.id && <OrderItems detail={orderDetails[order.id]}
-                  loading={loading === `order:${order.id}`} error={error} />}
-              </div>)}
-            </div>
-          </section>
+          <PurchaseHistory orders={detail.orders} />
           <section className="customer-contact-block">
+            <section className="crm-overview" aria-label="Customer overview">
+            <header className="crm-section-heading"><span>Customer profile</span><h3>Customer overview</h3>
+              <p>Purchase behaviour and the latest follow-up status.</p></header>
             <div className="customer-analysis-strip">
               <div><span>Sales group</span><SegmentBadge customer={customer} /></div>
               <div><span>Last purchase</span><strong>{customer.recency_days} days ago</strong></div>
@@ -280,13 +269,124 @@ function CustomerRows({ customer, expanded, tone, detail, openOrder, orderDetail
               <div className="customer-tags"><span>Why this customer matters</span><div>
                 {customer.tags.map(tag => <em key={tag}>{tagLabels[tag] || tag}</em>)}</div></div>
             </div>
+            <div className="crm-current-status"><strong>Latest follow-up</strong><FollowUpBadge customer={customer} /></div>
+            </section>
             <FollowUpPanel canWrite={canWrite} customer={customer} history={detail.follow_ups || []}
               saving={saving} onSave={saveFollowUp} />
           </section>
         </>}
       </div>
-    </td></tr>}
+    </FeedbackDialog>}
   </>;
+}
+
+function CustomerOrderHistory({ customerId, cached }: { customerId: string; cached?: CustomerDetail }) {
+  const [data, setData] = useState<CustomerDetail | undefined>(cached);
+  const [error, setError] = useState<string>();
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (cached) { setData(cached); return; }
+    const controller = new AbortController();
+    setError(undefined);
+    async function load() {
+      try {
+        const response = await fetch(`/api/customers/${customerId}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Could not load this customer's orders.");
+        const result: CustomerDetail = await response.json();
+        if (!controller.signal.aborted) setData(result);
+      } catch (reason) {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load orders.");
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [customerId, cached, retry]);
+  if (error) return <div role="alert"><p>{error}</p><button className="button" onClick={() => setRetry(value => value + 1)}>Try again</button></div>;
+  if (!data) return <p role="status">Loading customer orders…</p>;
+  return <PurchaseHistory orders={data.orders} />;
+}
+
+function PurchaseHistory({ orders }: { orders: Order[] }) {
+  const [selected, setSelected] = useState(orders[0]?.id);
+  const [detail, setDetail] = useState<OrderDetail>();
+  const [error, setError] = useState<string>();
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!selected) return;
+    const controller = new AbortController();
+    setDetail(undefined); setError(undefined);
+    async function load() {
+      try {
+        const response = await fetch(`/api/orders/${selected}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Could not load this order. Please try again.");
+        const result: OrderDetail = await response.json();
+        if (!controller.signal.aborted) setDetail(result);
+      } catch (reason) {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load order");
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [selected, retry]);
+  const activeDetail = detail?.order.id === selected ? detail : undefined;
+  return <section className="customer-orders-block">
+    <div className="block-heading"><div><span>Purchase history</span><h3>Customer orders</h3></div>
+      <strong>{orders.length} order{orders.length === 1 ? "" : "s"}</strong></div>
+    {!orders.length ? <p>No orders recorded.</p> : <>
+      <p className="order-help">Select an order to review its products here.</p>
+      <div className="support-order-list" aria-label="Customer orders">
+        {orders.map(order => <button type="button" className="support-order" key={order.id}
+          aria-pressed={selected === order.id} onClick={() => setSelected(order.id)}>
+          <strong>#{order.source_record_id}</strong><span>{order.order_date}</span>
+          <strong>{money(order.order_value)}</strong><span>{selected === order.id ? "Selected" : "View details"}</span>
+        </button>)}
+      </div>
+      <section className="support-order-detail" aria-label="Selected order details" aria-live="polite"
+        aria-busy={!activeDetail && !error}>
+        {error ? <div role="alert"><p>{error}</p><button type="button" className="button"
+          onClick={() => setRetry(value => value + 1)}>Try again</button></div> : !activeDetail ?
+          <p>Loading order details…</p> : <>
+            <h3>Order #{activeDetail.order.source_record_id}</h3>
+            <p>{activeDetail.order.order_date} · {activeDetail.order.payment_method || "Payment not recorded"}</p>
+            <p>{[activeDetail.order.delivery_city, activeDetail.order.delivery_pincode].filter(Boolean).join(" · ") || "Location not recorded"}</p>
+            <h4>Products purchased</h4>
+            {!activeDetail.items.length && <p>No products recorded for this order.</p>}
+            {activeDetail.items.map(item => <article className="support-product" key={item.id}>
+              <strong>{item.canonical_name || item.raw_product_name}</strong>
+              {(item.variant_name || item.raw_variant_name) && <span>{item.variant_name || item.raw_variant_name}</span>}
+              <div><span>{item.quantity} × {money(item.unit_price)}</span><strong>{money(item.line_total)}</strong></div>
+            </article>)}
+            <div className="support-order-total"><span>Order total</span><strong>{money(activeDetail.order.order_value)}</strong></div>
+          </>}
+      </section>
+    </>}
+  </section>;
+}
+
+function FeedbackDialog({ name, phone, children, onClose, saving }: {
+  name: string; phone?: string; children: ReactNode; onClose: () => void; saving: boolean;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const dirty = useRef(false);
+  function close() {
+    if (saving) return;
+    if (!dirty.current || window.confirm("Discard unsaved feedback and close?")) onClose();
+  }
+  useEffect(() => {
+    const dialog = ref.current;
+    const previousOverflow = document.body.style.overflow;
+    dialog?.showModal();
+    document.body.style.overflow = "hidden";
+    return () => { dialog?.close(); document.body.style.overflow = previousOverflow; };
+  }, []);
+  return createPortal(<dialog ref={ref} className="feedback-dialog" aria-labelledby="feedback-title"
+    onCancel={event => { event.preventDefault(); close(); }}
+    onChange={() => { dirty.current = true; }} onReset={() => { dirty.current = false; }}>
+    <header className="feedback-dialog-header"><div><h2 id="feedback-title">{name}</h2>
+      <p>{phone || "No phone number recorded"} · Customer follow-up</p></div>
+      <button className="button" autoFocus disabled={saving} onClick={close}>Close</button></header>
+    {children}
+  </dialog>, document.body);
 }
 
 function SegmentBadge({ customer }: { customer: Customer }) {
@@ -336,14 +436,16 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
     ["RESULTS_NOT_SEEN", "Has not seen results"],
     ["READY_TO_REORDER", "Ready to order again"],
   ];
-  return <section className="follow-up-panel">
+  return <>
+    <section className="follow-up-panel" aria-label="Log a follow-up">
     <div className="follow-up-heading">
-      <div><span>Customer conversation</span><h3>{canWrite ? "Record what happened after the call" : "Explore the follow-up form"}</h3>
-        <p>Structured answers help the whole team choose the right next action.</p></div>
-      <FollowUpBadge customer={customer} />
+      <div><span>New activity</span><h3>{canWrite ? "Log a follow-up" : "Follow-up form preview"}</h3>
+        <p>Capture the conversation, customer feedback and next action.</p></div>
     </div>
     {!canWrite && <p className="viewer-form-notice">View-only preview: you can try the fields below to learn how follow-ups work. Nothing you enter here will be saved.</p>}
     <form className="follow-up-form rich-follow-up-form" onSubmit={submit}>
+      <fieldset className="crm-form-section crm-contact"><legend>1. Contact details</legend>
+      <p className="crm-section-help">Who made contact and what happened?</p>
       <label><span>Call result</span><select name="status" required defaultValue="CONTACTED">
         <option value="CONTACTED">Spoke to customer</option>
         <option value="NO_ANSWER">No answer</option>
@@ -358,11 +460,24 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
       </select></label>
       <label><span>Team member</span><input name="contacted_by" required minLength={2}
         maxLength={100} placeholder="Your name" /></label>
+      </fieldset>
+      <fieldset className="crm-form-section crm-feedback"><legend>2. Customer feedback</legend>
+      <p className="crm-section-help">Record the customer's experience and concerns.</p>
       <label><span>Customer feeling</span><select name="sentiment" defaultValue="NOT_RECORDED">
         <option value="NOT_RECORDED">Not discussed</option>
         <option value="POSITIVE">Positive</option><option value="NEUTRAL">Neutral</option>
         <option value="MIXED">Mixed</option><option value="NEGATIVE">Negative</option>
       </select></label>
+      <fieldset className="feedback-options"><legend>What did the customer say?</legend>
+        {feedbackOptions.map(([value, label]) => <label key={value}>
+          <input type="checkbox" name="feedback_tags" value={value} /><span>{label}</span>
+        </label>)}
+      </fieldset>
+      <label className="follow-up-notes"><span>Call notes or full concern</span><textarea name="notes"
+        maxLength={1000} placeholder="Write the important details for the next team member" /></label>
+      </fieldset>
+      <fieldset className="crm-form-section crm-next"><legend>3. Next action</legend>
+      <p className="crm-section-help">Plan the next conversation and purchase opportunity.</p>
       <label><span>Chance of next order</span><select name="purchase_intent" defaultValue="UNKNOWN">
         <option value="UNKNOWN">Not discussed</option>
         <option value="HIGH">Likely to order soon</option>
@@ -371,23 +486,18 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
         <option value="NONE">Does not plan to order</option>
       </select></label>
       <label><span>Expected order date</span><input name="expected_order_date" type="date" /></label>
-      <label><span>Next follow-up</span><input name="next_follow_up_at"
-        type="datetime-local" /></label>
+      <label><span>Next follow-up</span><input name="next_follow_up_at" type="datetime-local" /></label>
       <label className="offer-interest-check"><input name="offer_interest" value="yes"
         type="checkbox" /><span>Customer wants an offer or discount</span></label>
-      <fieldset className="feedback-options"><legend>What did the customer say?</legend>
-        {feedbackOptions.map(([value, label]) => <label key={value}>
-          <input type="checkbox" name="feedback_tags" value={value} /><span>{label}</span>
-        </label>)}
       </fieldset>
-      <label className="follow-up-notes"><span>Call notes or full concern</span><textarea name="notes"
-        maxLength={1000} placeholder="Write the important details for the next team member" /></label>
       <button className="button primary" disabled={!canWrite || saving}
         title={!canWrite ? "Customer support or administrator access is required to save call results" : undefined}>
-        {!canWrite ? "Save call result (view only)" : saving ? "Saving call..." : "Save call result"}</button>
+        {!canWrite ? "Save follow-up (view only)" : saving ? "Saving follow-up..." : "Save follow-up"}</button>
     </form>
-    <div className="follow-up-history">
-      <strong>Previous customer conversations</strong>
+    </section>
+    <section className="follow-up-history" aria-label="Follow-up history">
+      <header className="crm-section-heading"><span>Activity timeline</span><h3>Follow-up history</h3>
+        <p>Review previous conversations and agreed next steps.</p></header>
       {history.length === 0 ? <p>No follow-up recorded yet.</p> :
         history.slice(0, 10).map(item => <article key={item.id}>
           <span className={`follow-up-pill ${item.status.toLowerCase()}`}>
@@ -406,25 +516,6 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
             </div>
             {item.notes && <p>{item.notes}</p>}</div>
         </article>)}
-    </div>
-  </section>;
-}
-function OrderItems({ detail, loading, error }: {
-  detail?: OrderDetail; loading: boolean; error?: string;
-}) {
-  if (loading) return <div className="order-detail-inline">Loading products...</div>;
-  if (error) return <div className="order-detail-inline alert error">{error}</div>;
-  if (!detail) return null;
-  return <div className="order-detail-inline">
-    <div className="order-meta"><span>Payment: {detail.order.payment_method || "Unknown"}</span>
-      <span>Pincode: {detail.order.delivery_pincode || "Unknown"}</span></div>
-    <table className="item-table"><thead><tr><th>Product</th><th>Catalogue match</th>
-      <th>Qty</th><th>Unit price</th><th>Line total</th><th>Mapping</th></tr></thead>
-      <tbody>{detail.items.map(item => <tr key={item.id}>
-        <td>{item.raw_product_name}<small>{item.raw_variant_name}</small></td>
-        <td>{item.canonical_name || "Unmapped"}<small>{item.variant_name}</small></td>
-        <td>{item.quantity}</td><td>{money(item.unit_price)}</td><td>{money(item.line_total)}</td>
-        <td><span className={`status-pill ${item.mapping_status.toLowerCase()}`}>
-          {item.mapping_status}</span></td></tr>)}</tbody></table>
-  </div>;
+    </section>
+  </>;
 }

@@ -30,10 +30,11 @@ export async function Shell({ title, subtitle, children }: {
   title: string; subtitle?: string; children: React.ReactNode;
 }) {
   const role = await currentRole();
-  const links: [string, string, IconName][] = role === "support" ? [["/customers", "Customers", "users"]] : [
+  const links: [string, string, IconName][] = role === "support" ? [["/customers", "Customers", "users"], ["/customers/opportunities", "Product opportunities", "spark"]] : [
     ["/", "Dashboard", "dashboard"], ["/ingestion", "Ingestion", "database"],
     ["/jobs", "Jobs", "jobs"], ["/mappings", "Mappings", "tag"],
     ["/orders", "Orders", "bag"], ["/customers", "Customers", "users"],
+    ["/customers/opportunities", "Product opportunities", "spark"],
     ["/marketing", "Marketing", "megaphone"],
   ];
   return <div className="shell">

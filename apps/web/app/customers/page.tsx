@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { ProductPicker, CatalogueProduct } from "./product-picker";
+import { ListSummary } from "../list-summary";
+import { SupportSummary } from "../support-summary";
 import { currentRole } from "@/lib/auth";
 import { api, Page } from "@/lib/api";
 import { Shell, Pager, Money } from "../components";
@@ -90,6 +93,7 @@ export default async function Customers({ searchParams }: {
   searchParams: Promise<{
     search?: string; offset?: string; sort?: string; direction?: string;
     follow_up_status?: string; segment?: string; tag?: string; sales_signal?: string;
+    product_search?: string; product_ids?: string; min_product_orders?: string; product_match?: string;
   }>;
 }) {
   const role = await currentRole();
@@ -104,17 +108,35 @@ export default async function Customers({ searchParams }: {
   const tag = tags.includes(params.tag || "") ? params.tag! : "";
   const salesSignals = ["HIGH_INTENT", "OFFER_INTEREST", "CONCERNS", "PRICE_HIGH"];
   const salesSignal = salesSignals.includes(params.sales_signal || "") ? params.sales_signal! : "";
+  const products = await api<CatalogueProduct[]>("/admin/product-options");
+  const selectedProducts = products.filter(product => (params.product_ids || "").split(",").includes(product.id)
+    || (!params.product_ids && (params.product_search || "").split(",").some(term => term.trim() && product.name.toLowerCase().includes(term.trim().toLowerCase())))).slice(0, 5);
+  const productIds = selectedProducts.map(product => product.id).join(",");
+  const productSearch = selectedProducts.map(product => product.name).join(", ");
+  const minProductOrders = ["1", "2", "3", "5"].includes(params.min_product_orders || "") ? params.min_product_orders! : "2";
+  const productMatch = params.product_match === "all" ? "all" : "any";
   const query = new URLSearchParams({ sort, direction });
   if (search) query.set("search", search);
   if (followUpStatus) query.set("follow_up_status", followUpStatus);
   if (segment) query.set("segment", segment);
   if (tag) query.set("tag", tag);
   if (salesSignal) query.set("sales_signal", salesSignal);
+  if (productSearch) {
+    query.set("product_ids", productIds); query.set("min_product_orders", minProductOrders); query.set("product_match", productMatch);
+  }
   const [data, analysis] = await Promise.all([
-    api<Page<Customer>>(`/customers?limit=${limit}&offset=${offset}&${query}`),
+    api<Page<Customer> & { summary: { repeat_customers: number; lifetime_value: string; orders: number } }>(`/customers?limit=${limit}&offset=${offset}&${query}`),
     api<SegmentData>("/admin/customer-segments"),
   ]);
   return <Shell title="Customers" subtitle="Prioritize retention, second purchases and win-back">
+    <ListSummary title={productSearch ? "Product buyer overview" : "Customer overview"}
+      description={productSearch ? `Customers matching ${productSearch} in ${minProductOrders}+ separate orders per product (${productMatch === "all" ? "all products" : "any product"}). Figures reflect all active filters and all pages.` : "All customers matching the current filters, across every page."}
+      cards={[
+        { label: "Customers", value: data.total, hint: "Matching customer profiles" },
+        { label: "Repeat customers", value: data.summary.repeat_customers, hint: "2+ orders across any products" },
+        { label: "Lifetime value", value: data.summary.lifetime_value, money: true, hint: "All-product spend by these customers" },
+        { label: "Lifetime orders", value: data.summary.orders, hint: "All-product orders by these customers" },
+      ]} />
     <section className="segment-overview">
       <div className="segment-overview-heading">
         <div><p className="section-kicker">Customer opportunity</p>
@@ -161,7 +183,18 @@ export default async function Customers({ searchParams }: {
         </form>
       </details>
     </section>
-    <form className="search customer-search">
+    <form className="search customer-search" key={query.toString()}>
+      <fieldset className="product-behavior-filter" id="product-purchase-behaviour"><legend>Product purchase behaviour</legend>
+        <p>Choose products from your mapped catalogue to find repeat buyers.</p>
+        <ProductPicker products={products} selected={selectedProducts.map(product => product.id)} />
+        <div>
+        <label>Orders per product<select name="min_product_orders" defaultValue={minProductOrders}>
+          <option value="1">1+ orders · Any buyer</option><option value="2">2+ orders · Repeat buyer</option>
+          <option value="3">3+ orders</option><option value="5">5+ orders</option></select></label>
+        <label>Match products<select name="product_match" defaultValue={productMatch}>
+          <option value="any">Any of these products</option><option value="all">All of these products</option></select></label></div>
+        <small>Uses mapped product identities across all variants and purchase history. Multiple units or lines in one order count once. Unmapped items are excluded until mapped.</small>
+      </fieldset>
       <input name="search" defaultValue={search} placeholder="Name, phone, email or product" />
       <select name="segment" defaultValue={segment} aria-label="Filter by customer group">
         <option value="">All sales groups</option>
@@ -193,10 +226,12 @@ export default async function Customers({ searchParams }: {
       <input type="hidden" name="sort" value={sort} />
       <input type="hidden" name="direction" value={direction} />
       <button className="button">Apply</button>
+      <Link className="button" href="/customers">Clear filters</Link>
     </form>
+    <SupportSummary />
     <CustomerTable canWrite={canWrite || role === "support"} customers={data.items} sort={sort} direction={direction}
       search={search} followUpStatus={followUpStatus} segment={segment} tag={tag}
-      salesSignal={salesSignal} />
+      salesSignal={salesSignal} productSearch={productIds} minProductOrders={minProductOrders} productMatch={productMatch} />
     <Pager total={data.total} offset={offset} limit={limit} path="/customers"
       query={query.toString()} />
   </Shell>;

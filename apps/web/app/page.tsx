@@ -1,4 +1,5 @@
 import { PerformancePanel } from "./performance-panel";
+import { SupportSummary } from "./support-summary";
 import { api } from "@/lib/api";
 import { Icon, Money, Shell } from "./components";
 import {
@@ -58,6 +59,7 @@ export default async function DashboardPage({ searchParams }: {
   return <Shell title="Executive dashboard"
     subtitle={"Revenue, customers and product performance for " + periodName}>
     <PerformancePanel period={compare} preserved={preserved} />
+    <SupportSummary />
     <section className="executive-toolbar">
       <div><span className="section-kicker">Business pulse</span>
         <h2>{periodName} performance</h2><p>All figures update from processed orders.</p></div>
