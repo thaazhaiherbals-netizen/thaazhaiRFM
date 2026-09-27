@@ -1,6 +1,7 @@
 # Orders and customer support usability
 
 - Orders accept inclusive from/to dates alongside search. Sorting and pagination retain the range; invalid ranges show an error and empty results have guidance.
+- Today, Yesterday, This week and This month shortcuts use India time (Monday-start weeks, week/month through today). Shortcuts retain the applied search and sorting, and reset pagination. Custom dates remain available. Order numbers expand customer and product details beneath the row without navigation, with loading, retry and empty states.
 - Support figures appear on the executive dashboard and customer screen. They cover all customers and team members, independent of list filters, using Asia/Kolkata calendar days.
 - People contacted counts distinct customers with a result other than no answer today. Positive/negative counts are conversation records with that sentiment today. Scheduled counts customers whose latest record schedules a follow-up today, excluding do-not-contact customers and superseded schedules.
 - The green Customer follow-up button opens a native modal dialog with customer context and a flat purchase list alongside the form. Selecting an order displays its products, quantities, unit prices, line totals, payment and location inside the same dialog. Loading failures offer a retry, and switching orders cancels stale requests without resetting feedback entries. Small screens put the form first. Escape/Close checks for unsaved edits; focus is contained by the native dialog. Saving refreshes the support figures.
