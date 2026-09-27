@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 let writes = 0;
 const customer = {id:"c1",customer_name:"Sample customer",order_count:1,lifetime_value:"500",average_order_value:"500",recency_days:2,segment:"NEW_CUSTOMER",tags:[],follow_up_status:"NOT_CONTACTED"};
 const fixtures = {
+ "/admin/support-summary":{today:"2026-09-27",contacted:2,positive:1,negative:0,scheduled:3},
  "/admin/ingestion/summary":{NEW:1,PROCESSING:0,PROCESSED:0,ERROR:1,pending_mapping_items:1},
  "/admin/ingestion":{items:[{id:"r1",source_record_id:"demo",source_system:"HOSTINGER",status:"ERROR",retry_count:0,ingested_at:"2026-09-22",error_message:"order_date is required"}],total:1},
  "/admin/unmapped-products":{items:[{source_system:"HOSTINGER",raw_product_name:"Sample soap",affected_items:1,affected_orders:1,item_revenue:"100",mapping_error:"No match"}],total:1},
@@ -78,6 +79,9 @@ const fixtures = {
   assert.equal(customerRes.status,200);
   const supportHtml=(await customerRes.text()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,"");
   assert.ok(supportHtml.includes("Customer support access"));
+  assert.ok(supportHtml.includes("People contacted"));
+  assert.ok(supportHtml.includes("Scheduled for today"));
+  assert.ok(supportHtml.includes("Add feedback"));
   assert.ok(!supportHtml.includes("Save group rules"));
   for (const href of ["/ingestion", "/jobs", "/mappings", "/orders"])
     assert.ok(!supportHtml.includes('href="'+href+'"'));

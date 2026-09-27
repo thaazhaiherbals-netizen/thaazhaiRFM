@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SupportSummary } from "../support-summary";
 import { currentRole } from "@/lib/auth";
 import { api, Page } from "@/lib/api";
 import { Shell, Pager, Money } from "../components";
@@ -115,6 +116,7 @@ export default async function Customers({ searchParams }: {
     api<SegmentData>("/admin/customer-segments"),
   ]);
   return <Shell title="Customers" subtitle="Prioritize retention, second purchases and win-back">
+    <SupportSummary />
     <section className="segment-overview">
       <div className="segment-overview-heading">
         <div><p className="section-kicker">Customer opportunity</p>

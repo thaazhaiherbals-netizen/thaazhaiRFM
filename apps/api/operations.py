@@ -325,11 +325,15 @@ def analytics(
 @router.get("/orders", response_model=Page)
 def orders(
     search: str | None = Query(None, max_length=150),
+    start_date: date | None = None,
+    end_date: date | None = None,
     sort: Literal["order_date", "order_value", "item_count", "customer_name"] = "order_date",
     direction: Literal["asc", "desc"] = "desc",
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> Page:
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(422, "Start date must be on or before end date")
     order_by = {
         "order_date": "o.order_date",
         "order_value": "o.order_value",
@@ -344,7 +348,7 @@ def orders(
             count(i.id) FILTER (WHERE i.mapping_status = 'PENDING') AS pending_items
         FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
         LEFT JOIN order_items i ON i.order_id = o.id
-        WHERE CAST(:search AS TEXT) IS NULL
+        WHERE (CAST(:search AS TEXT) IS NULL
            OR o.source_record_id ILIKE '%' || :search || '%'
            OR COALESCE(c.customer_name, '') ILIKE '%' || :search || '%'
            OR COALESCE(c.normalized_phone, '') ILIKE '%' || :search || '%'
@@ -359,10 +363,42 @@ def orders(
                    OR COALESCE(sv.variant_name, '') ILIKE '%' || :search || '%'
                )
            )
+        )
+        AND (CAST(:start_date AS DATE) IS NULL OR o.order_date >= :start_date)
+        AND (CAST(:end_date AS DATE) IS NULL OR o.order_date <= :end_date)
         GROUP BY o.id, c.id
         ORDER BY {order_by} {direction.upper()}, o.id
     """
-    return paged(sql, {"search": search}, limit, offset)
+    return paged(sql, {"search": search, "start_date": start_date, "end_date": end_date}, limit, offset)
+
+
+@router.get("/admin/support-summary")
+def support_summary() -> dict:
+    with get_engine().connect() as connection:
+        result = connection.execute(text("""
+            WITH bounds AS (
+                SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today
+            ), daily AS (
+                SELECT f.* FROM customer_follow_ups f CROSS JOIN bounds b
+                WHERE f.contacted_at >= b.today::timestamp AT TIME ZONE 'Asia/Kolkata'
+                  AND f.contacted_at < (b.today + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+            ), latest AS (
+                SELECT DISTINCT ON (customer_id) * FROM customer_follow_ups
+                ORDER BY customer_id, contacted_at DESC, id DESC
+            )
+            SELECT b.today,
+                (SELECT count(DISTINCT customer_id) FROM daily
+                 WHERE status <> 'NO_ANSWER') AS contacted,
+                (SELECT count(*) FROM daily WHERE sentiment = 'POSITIVE') AS positive,
+                (SELECT count(*) FROM daily WHERE sentiment = 'NEGATIVE') AS negative,
+                (SELECT count(*) FROM latest
+                 WHERE status <> 'DO_NOT_CONTACT'
+                   AND next_follow_up_at >= b.today::timestamp AT TIME ZONE 'Asia/Kolkata'
+                   AND next_follow_up_at < (b.today + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+                ) AS scheduled
+            FROM bounds b
+        """)).mappings().one()
+        return dict(result)
 
 
 @router.get("/orders/{order_id}")

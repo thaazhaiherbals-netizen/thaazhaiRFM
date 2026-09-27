@@ -35,6 +35,56 @@ def process_all(client, engine):
     assert jobs.run_next_job(engine)
 
 
+def test_order_date_range_includes_boundaries_and_preserves_search(client, engine):
+    for name, day in [("early", "April 2, 2026"), ("match-a", "April 3, 2026"),
+                      ("match-b", "April 4, 2026"), ("late", "April 5, 2026")]:
+        insert_raw(engine, payload(name, order_date=day))
+    process_all(client, engine)
+    query = "/orders?start_date=2026-04-03&end_date=2026-04-04&search=match&limit=1"
+    first = client.get(query).json()
+    second = client.get(query + "&offset=1").json()
+    assert first["total"] == second["total"] == 2
+    assert first["items"][0]["id"] != second["items"][0]["id"]
+    assert client.get("/orders?start_date=2026-04-05&end_date=2026-04-03").status_code == 422
+    assert client.get("/orders?start_date=2026-02-30").status_code == 422
+
+
+def test_support_summary_counts_people_and_latest_schedule(client, engine):
+    insert_raw(engine, payload("support"))
+    process_all(client, engine)
+    customer_id = client.get("/customers").json()["items"][0]["id"]
+    with engine.begin() as connection:
+        connection.execute(text("""
+            INSERT INTO customer_follow_ups
+                (customer_id, status, channel, contacted_by, sentiment, contacted_at, next_follow_up_at)
+            SELECT :id, status, 'CALL', 'Test agent', sentiment,
+                (((now() AT TIME ZONE 'Asia/Kolkata')::date + time '00:00')
+                    AT TIME ZONE 'Asia/Kolkata') + seq * interval '1 minute',
+                CASE WHEN seq = 3 THEN NULL ELSE now() END
+            FROM (VALUES (1, 'CONTACTED', 'POSITIVE'), (2, 'CONTACTED', 'NEGATIVE'),
+                (3, 'NO_ANSWER', 'NOT_RECORDED')) AS events(seq, status, sentiment)
+        """), {"id": customer_id})
+    result = client.get("/admin/support-summary").json()
+    assert result["contacted"] == 1
+    assert result["positive"] == result["negative"] == 1
+    assert result["scheduled"] == 0  # Superseded schedules must not remain due.
+    with engine.begin() as connection:
+        connection.execute(text("""
+            UPDATE customer_follow_ups SET next_follow_up_at = now()
+            WHERE customer_id = :id AND status = 'NO_ANSWER'
+        """), {"id": customer_id})
+        connection.execute(text("""
+            INSERT INTO customer_follow_ups
+                (customer_id, status, channel, contacted_by, sentiment, contacted_at)
+            VALUES (:id, 'CONTACTED', 'CALL', 'Test agent', 'POSITIVE',
+                ((now() AT TIME ZONE 'Asia/Kolkata')::date::timestamp
+                    AT TIME ZONE 'Asia/Kolkata') - interval '1 second')
+        """), {"id": customer_id})
+    result = client.get("/admin/support-summary").json()
+    assert result["scheduled"] == 1
+    assert result["positive"] == 1  # Yesterday in India must be excluded.
+
+
 def test_dashboard_order_customer_lists_and_details(client, engine):
     insert_raw(engine, payload("one", total=500))
     insert_raw(engine, payload("two", total=250, phone="+91 98765 43210"))
