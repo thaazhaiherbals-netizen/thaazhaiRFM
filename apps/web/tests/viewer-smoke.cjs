@@ -81,7 +81,7 @@ const fixtures = {
   assert.ok(supportHtml.includes("Customer support access"));
   assert.ok(supportHtml.includes("People contacted"));
   assert.ok(supportHtml.includes("Scheduled for today"));
-  assert.ok(supportHtml.includes("Add feedback"));
+  assert.ok(supportHtml.includes("Record feedback"));
   assert.ok(!supportHtml.includes("Save group rules"));
   for (const href of ["/ingestion", "/jobs", "/mappings", "/orders"])
     assert.ok(!supportHtml.includes('href="'+href+'"'));

@@ -23,6 +23,11 @@ type Order = {
   id: string; source_record_id: string; order_date: string; order_value: string;
   payment_method?: string; delivery_city?: string; delivery_pincode?: string;
 };
+type OrderDetail = { order: Order; items: {
+  id: string; raw_product_name: string; raw_variant_name?: string;
+  canonical_name?: string; variant_name?: string; quantity: number;
+  unit_price: string; line_total: string;
+}[] };
 type FollowUp = {
   id: string; customer_id: string; status: FollowUpStatus; channel: string;
   contacted_by: string; sentiment: string; feedback_tags: string[];
@@ -212,9 +217,9 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
 }) {
   return <>
     <tr className={`expandable-row customer-band-${tone} ${expanded ? "expanded" : ""}`}>
-      <td><button className="button" onClick={toggleCustomer} aria-haspopup="dialog"
+      <td><button className="button primary feedback-action" onClick={toggleCustomer} aria-haspopup="dialog"
         aria-label={`Open feedback for ${customer.customer_name || "customer"}`}>
-        {canWrite ? "Add feedback" : "View feedback"}</button></td>
+        {canWrite ? "Record feedback" : "View feedback"}</button></td>
       <td><button className="row-button" onClick={toggleCustomer}>
         {customer.customer_name || "Unknown"}</button><small>{customer.email}</small></td>
       <td><SegmentBadge customer={customer} /></td>
@@ -231,21 +236,7 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
         {error && <div className="alert error" role="alert">{error}. Please try again; your form entries are preserved.</div>}
         {notice && <div className="alert success" role="status">{notice}</div>}
         {detail && <>
-          <section className="customer-orders-block">
-            <div className="block-heading"><div><span>Purchase history</span>
-              <h3>All customer orders</h3></div>
-              <strong>{detail.orders.length} order{detail.orders.length === 1 ? "" : "s"}</strong>
-            </div>
-            <div className="order-stack">
-              {detail.orders.length === 0 && <p>No orders recorded.</p>}
-              {detail.orders.map(order => <a className="support-order" key={order.id}
-                href={`/orders/${order.id}`} target="_blank" rel="noreferrer">
-                <strong>#{order.source_record_id}</strong><span>{order.order_date}</span>
-                <strong>{money(order.order_value)}</strong><span>View order ↗</span>
-              </a>)}
-
-            </div>
-          </section>
+          <PurchaseHistory orders={detail.orders} />
           <section className="customer-contact-block">
             <div className="customer-analysis-strip">
               <div><span>Sales group</span><SegmentBadge customer={customer} /></div>
@@ -261,6 +252,63 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
       </div>
     </FeedbackDialog>}
   </>;
+}
+
+function PurchaseHistory({ orders }: { orders: Order[] }) {
+  const [selected, setSelected] = useState(orders[0]?.id);
+  const [detail, setDetail] = useState<OrderDetail>();
+  const [error, setError] = useState<string>();
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!selected) return;
+    const controller = new AbortController();
+    setDetail(undefined); setError(undefined);
+    async function load() {
+      try {
+        const response = await fetch(`/api/orders/${selected}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Could not load this order. Please try again.");
+        const result: OrderDetail = await response.json();
+        if (!controller.signal.aborted) setDetail(result);
+      } catch (reason) {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load order");
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [selected, retry]);
+  const activeDetail = detail?.order.id === selected ? detail : undefined;
+  return <section className="customer-orders-block">
+    <div className="block-heading"><div><span>Purchase history</span><h3>Customer orders</h3></div>
+      <strong>{orders.length} order{orders.length === 1 ? "" : "s"}</strong></div>
+    {!orders.length ? <p>No orders recorded.</p> : <>
+      <p className="order-help">Select an order to review its products here.</p>
+      <div className="support-order-list" aria-label="Customer orders">
+        {orders.map(order => <button type="button" className="support-order" key={order.id}
+          aria-pressed={selected === order.id} onClick={() => setSelected(order.id)}>
+          <strong>#{order.source_record_id}</strong><span>{order.order_date}</span>
+          <strong>{money(order.order_value)}</strong><span>{selected === order.id ? "Selected" : "View details"}</span>
+        </button>)}
+      </div>
+      <section className="support-order-detail" aria-label="Selected order details" aria-live="polite"
+        aria-busy={!activeDetail && !error}>
+        {error ? <div role="alert"><p>{error}</p><button type="button" className="button"
+          onClick={() => setRetry(value => value + 1)}>Try again</button></div> : !activeDetail ?
+          <p>Loading order details…</p> : <>
+            <h3>Order #{activeDetail.order.source_record_id}</h3>
+            <p>{activeDetail.order.order_date} · {activeDetail.order.payment_method || "Payment not recorded"}</p>
+            <p>{[activeDetail.order.delivery_city, activeDetail.order.delivery_pincode].filter(Boolean).join(" · ") || "Location not recorded"}</p>
+            <h4>Products purchased</h4>
+            {!activeDetail.items.length && <p>No products recorded for this order.</p>}
+            {activeDetail.items.map(item => <article className="support-product" key={item.id}>
+              <strong>{item.canonical_name || item.raw_product_name}</strong>
+              {(item.variant_name || item.raw_variant_name) && <span>{item.variant_name || item.raw_variant_name}</span>}
+              <div><span>{item.quantity} × {money(item.unit_price)}</span><strong>{money(item.line_total)}</strong></div>
+            </article>)}
+            <div className="support-order-total"><span>Order total</span><strong>{money(activeDetail.order.order_value)}</strong></div>
+          </>}
+      </section>
+    </>}
+  </section>;
 }
 
 function FeedbackDialog({ name, phone, children, onClose, saving }: {
