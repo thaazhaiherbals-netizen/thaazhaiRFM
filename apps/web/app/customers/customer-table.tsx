@@ -81,11 +81,12 @@ const formatDateTime = (value?: string) => value
   : "";
 
 export function CustomerTable({ customers, sort, direction, search, followUpStatus,
-  segment, tag, salesSignal, canWrite, productSearch, minProductOrders, productMatch }: {
+  segment, tag, salesSignal, canWrite, productSearch, minProductOrders, productMatch, sortable = true }: {
   canWrite: boolean;
   customers: Customer[]; sort: string; direction: string; search: string;
   followUpStatus: string; segment: string; tag: string; salesSignal: string;
   productSearch: string; minProductOrders: string; productMatch: string;
+  sortable?: boolean;
 }) {
   const router = useRouter();
   function sortHref(column: string) {
@@ -99,11 +100,12 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
     if (tag) query.set("tag", tag);
     if (salesSignal) query.set("sales_signal", salesSignal);
     if (productSearch) {
-      query.set("product_search", productSearch); query.set("min_product_orders", minProductOrders); query.set("product_match", productMatch);
+      query.set("product_ids", productSearch); query.set("min_product_orders", minProductOrders); query.set("product_match", productMatch);
     }
     return `/customers?${query.toString()}`;
   }
   function sortLabel(label: string, column: string) {
+    if (!sortable) return label;
     const marker = sort === column ? (direction === "asc" ? " \u2191" : " \u2193") : " \u2195";
     return <a className={`sort-link ${sort === column ? "active" : ""}`}
       href={sortHref(column)}>{label}{marker}</a>;
@@ -235,7 +237,7 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
         <span aria-hidden="true">{ordersExpanded ? "−" : "+"} </span>{customer.customer_name || "Unknown"}
         <small>{ordersExpanded ? "Hide orders" : "View orders"}</small></button><small>{customer.email}</small>
         {customer.product_purchases?.map(purchase => <small className="purchase-evidence" key={purchase.product}>
-          <strong>{purchase.product}: {purchase.orders} orders</strong> · Last: {purchase.last_purchase}</small>)}</td>
+          <strong>{purchase.product}: {purchase.orders} orders</strong>{purchase.orders > 0 ? ` · Last: ${purchase.last_purchase}` : " · Not purchased"}</small>)}</td>
       <td><SegmentBadge customer={customer} /></td>
       <td>{customer.normalized_phone}</td><td>{customer.first_order_date}</td>
       <td>{customer.last_order_date}</td><td><span className="count-badge">

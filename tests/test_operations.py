@@ -35,6 +35,37 @@ def process_all(client, engine):
     assert jobs.run_next_job(engine)
 
 
+def test_catalogue_ids_match_aliases_without_matching_similar_products(client, engine):
+    for name, phone, product in [
+        ("mapped-a1", "9000000301", "Old aloe alias"), ("mapped-a2", "9000000301", "Old aloe alias"),
+        ("mapped-b", "9000000301", "Old colour alias"),
+        ("premium-1", "9000000302", "Aloe Gel Premium"), ("premium-2", "9000000302", "Aloe Gel Premium"),
+        ("unmapped", "9000000303", "Aloe Gel unknown"),
+    ]:
+        add_product_order(engine, name, phone, [product])
+    process_all(client, engine)
+    with engine.begin() as connection:
+        ids = {}
+        for raw, canonical in [("Old aloe alias", "Test Aloe Gel"), ("Old colour alias", "Test Hair Colour"),
+                               ("Aloe Gel Premium", "Test Aloe Gel Premium")]:
+            product_id = connection.execute(text("INSERT INTO products (canonical_name) VALUES (:name) RETURNING id"), {"name": canonical}).scalar_one()
+            ids[canonical] = str(product_id)
+            connection.execute(text("UPDATE order_items SET product_id=:id, mapping_status='RESOLVED', mapping_error=NULL WHERE raw_product_name=:raw"), {"id": product_id, "raw": raw})
+    a, b = ids["Test Aloe Gel"], ids["Test Hair Colour"]
+    buyers = client.get(f"/customers?product_ids={a}").json()
+    assert buyers["total"] == 1
+    assert buyers["items"][0]["product_purchases"][0]["orders"] == 2
+    assert buyers["items"][0]["product_purchases"][0]["product"] == "Test Aloe Gel"
+    opportunity = client.get(f"/admin/product-opportunities?product_a={a}&product_b={b}").json()
+    assert opportunity["total"] == 1
+    assert "segment" in opportunity["items"][0]
+    assert "follow_up_status" in opportunity["items"][0]
+    assert client.get(f"/admin/product-opportunities?product_a={a}&product_b={b}&combo={a}").json()["total"] == 0
+    options = client.get("/admin/product-options").json()
+    assert {"id": a, "name": "Test Aloe Gel"} in options
+    assert not any(product["name"] == "Aloe Gel unknown" for product in options)
+
+
 def test_filtered_summaries_cover_every_page(client, engine):
     insert_raw(engine, payload("summary-one", total=500))
     insert_raw(engine, payload("summary-two", total=250))
@@ -101,7 +132,7 @@ def test_combo_and_cross_sell_opportunities(client, engine):
     assert cross["items"][0]["normalized_phone"].endswith("9000000204")
     assert client.get(query + "&search=no-such-customer").json()["total"] == 0
     assert client.get("/admin/product-opportunities?product_a=aloe&product_b=aloe").status_code == 422
-    assert "Aloe Gel" in client.get("/admin/product-options").json()
+    assert all("id" in product and "name" in product for product in client.get("/admin/product-options").json())
 
 
 def test_order_date_range_includes_boundaries_and_preserves_search(client, engine):

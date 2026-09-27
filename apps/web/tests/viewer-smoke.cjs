@@ -15,8 +15,8 @@ const fixtures = {
  "/admin/products":{items:[],total:0},
  "/admin/customers/c1/follow-ups":{id:"f1"},
  "/customers":{items:[customer],total:1,summary:{repeat_customers:0,lifetime_value:"500",orders:1}},
- "/admin/product-options":["Aloe Gel","Hair Colour"],
- "/admin/product-opportunities":{items:[],total:0,summary:{lifetime_value:"0",repeat_a:0,a_orders:0}},
+ "/admin/product-options":[{id:"11111111-1111-4111-8111-111111111111",name:"Aloe Gel"},{id:"22222222-2222-4222-8222-222222222222",name:"Hair Colour"}],
+ "/admin/product-opportunities":{items:[{...customer,a_orders:2,b_orders:1,a_last:"2026-09-01",b_last:"2026-08-01"}],total:1,summary:{lifetime_value:"500",repeat_a:1,a_orders:2}},
  "/admin/customer-segments":{segments:[],thresholds:{high_value:"500",vip_value:"1000",latest_order_date:"2026-09-22"},settings:{new_customer_days:30,active_customer_days:90,champion_recency_days:60,champion_min_orders:3,high_value_percentile:".75",vip_value_percentile:".9"}},
  "/customers/c1":{customer,orders:[],follow_ups:[]},
 };
@@ -85,9 +85,14 @@ const fixtures = {
   assert.ok(supportHtml.includes("Scheduled for today"));
   assert.ok(supportHtml.includes("Customer follow-up"));
   assert.ok(supportHtml.includes("Product purchase behaviour"));
-  const opportunities = await fetch(base+"/customers/opportunities?product_a=aloe&product_b=hair",{headers:{cookie:support}});
+  const opportunities = await fetch(base+"/customers/opportunities?product_a=11111111-1111-4111-8111-111111111111&product_b=22222222-2222-4222-8222-222222222222",{headers:{cookie:support}});
   assert.equal(opportunities.status,200);
-  assert.ok((await opportunities.text()).includes("Combo audience"));
+  const opportunitiesHtml = await opportunities.text();
+  assert.ok(opportunitiesHtml.includes("Upsell audience"));
+  assert.ok(opportunitiesHtml.includes('name="product_a"'));
+  assert.ok(opportunitiesHtml.includes("product_ids="));
+  assert.ok(opportunitiesHtml.includes("Customer follow-up"));
+  assert.ok(opportunitiesHtml.includes("View orders"));
   assert.ok(!supportHtml.includes("Save group rules"));
   for (const href of ["/ingestion", "/jobs", "/mappings", "/orders"])
     assert.ok(!supportHtml.includes('href="'+href+'"'));

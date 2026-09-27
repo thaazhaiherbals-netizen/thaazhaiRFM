@@ -548,6 +548,7 @@ def customer_segments() -> dict:
 def customers(
     search: str | None = Query(None, max_length=150),
     product_search: str | None = Query(None, max_length=150),
+    product_ids: str | None = Query(None, max_length=200),
     min_product_orders: int = Query(2, ge=1, le=100),
     product_match: Literal["any", "all"] = "any",
     segment: CustomerSegment | None = None,
@@ -580,6 +581,14 @@ def customers(
     offset: int = Query(0, ge=0),
 ) -> Page:
     product_terms = list(dict.fromkeys(term.strip().lower() for term in (product_search or "").split(",") if term.strip()))
+    try:
+        selected_ids = list(dict.fromkeys(str(UUID(value.strip())) for value in (product_ids or "").split(",") if value.strip()))
+    except ValueError:
+        raise HTTPException(422, "Select valid catalogue products")
+    if len(selected_ids) > 5:
+        raise HTTPException(422, "Choose up to five catalogue products")
+    if selected_ids:
+        product_terms = []
     if len(product_terms) > 5:
         raise HTTPException(422, "Choose up to five product names separated by commas")
     order_by = {
@@ -600,11 +609,16 @@ def customers(
             FROM orders o JOIN order_items i ON i.order_id = o.id
             LEFT JOIN products p ON p.id = i.product_id
             LEFT JOIN product_variants v ON v.id = i.variant_id
-            CROSS JOIN unnest(CAST(:product_terms AS TEXT[])) AS term
-            WHERE strpos(lower(COALESCE(p.canonical_name, '')), term) > 0
+            CROSS JOIN (
+                SELECT id AS selected_id, canonical_name AS term FROM products
+                WHERE id::text = ANY(CAST(:product_ids AS TEXT[]))
+                UNION ALL SELECT NULL::uuid, term FROM unnest(CAST(:product_terms AS TEXT[])) AS term
+            ) selected
+            WHERE (selected_id IS NOT NULL AND i.product_id = selected_id)
+               OR (selected_id IS NULL AND (strpos(lower(COALESCE(p.canonical_name, '')), term) > 0
                OR strpos(lower(COALESCE(i.raw_product_name, '')), term) > 0
                OR strpos(lower(COALESCE(v.variant_name, '')), term) > 0
-               OR strpos(lower(COALESCE(i.raw_variant_name, '')), term) > 0
+               OR strpos(lower(COALESCE(i.raw_variant_name, '')), term) > 0))
             GROUP BY o.customer_id, term
         )
         SELECT c.id, c.customer_name, c.normalized_phone, c.email,
@@ -652,9 +666,9 @@ def customers(
                    OR COALESCE(sv.variant_name, '') ILIKE '%' || :search || '%'
                )
            )
-        ) AND (cardinality(CAST(:product_terms AS TEXT[])) = 0
+        ) AND (:product_count = 0
             OR (:product_match = 'any' AND pm.qualified_terms > 0)
-            OR (:product_match = 'all' AND pm.qualified_terms = cardinality(CAST(:product_terms AS TEXT[]))))
+            OR (:product_match = 'all' AND pm.qualified_terms = :product_count))
         AND (
             CAST(:follow_up_status AS TEXT) IS NULL
             OR (:follow_up_status = 'NOT_CONTACTED' AND lf.id IS NULL)
@@ -679,6 +693,8 @@ def customers(
             "tag": tag,
             "sales_signal": sales_signal,
             "product_terms": product_terms,
+            "product_ids": selected_ids,
+            "product_count": len(selected_ids) or len(product_terms),
             "min_product_orders": min_product_orders,
             "product_match": product_match,
         },
@@ -691,13 +707,11 @@ def customers(
 
 
 @router.get("/admin/product-options")
-def product_options() -> list[str]:
+def product_options() -> list[dict]:
     with get_engine().connect() as connection:
-        return list(connection.execute(text("""
-            SELECT DISTINCT COALESCE(p.canonical_name, i.raw_product_name) AS name
-            FROM order_items i LEFT JOIN products p ON p.id = i.product_id
-            WHERE COALESCE(p.canonical_name, i.raw_product_name, '') <> '' ORDER BY name
-        """)).scalars())
+        return [dict(row) for row in connection.execute(text(
+            "SELECT id, canonical_name AS name FROM products ORDER BY canonical_name, id"
+        )).mappings()]
 
 
 @router.get("/admin/product-opportunities", response_model=SummaryPage)
@@ -711,18 +725,25 @@ def product_opportunities(
     offset: int = Query(0, ge=0),
 ) -> SummaryPage:
     a, b, excluded = product_a.strip().lower(), product_b.strip().lower(), combo.strip().lower()
+    def catalogue_id(value: str) -> str | None:
+        try:
+            return str(UUID(value))
+        except ValueError:
+            return None
+    a_id, b_id, combo_id = catalogue_id(a), catalogue_id(b), catalogue_id(excluded)
     if len(a) < 2 or len(b) < 2 or a == b:
         raise HTTPException(422, "Choose two different product names, each at least two characters")
     sql = """
         WITH lines AS (
-            SELECT o.customer_id, o.id AS order_id, o.order_date,
+            SELECT o.customer_id, o.id AS order_id, o.order_date, i.product_id::text AS product_id,
                 lower(concat_ws(' ', p.canonical_name, i.raw_product_name, v.variant_name, i.raw_variant_name)) AS names
             FROM orders o JOIN order_items i ON i.order_id = o.id
             LEFT JOIN products p ON p.id = i.product_id
             LEFT JOIN product_variants v ON v.id = i.variant_id
         ), hits AS (
-            SELECT *, strpos(names, :a) > 0 AS bought_a, strpos(names, :b) > 0 AS bought_b,
-                (:combo <> '' AND strpos(names, :combo) > 0) AS bought_combo FROM lines
+            SELECT *, CASE WHEN CAST(:a_id AS TEXT) IS NOT NULL THEN product_id = :a_id ELSE strpos(names, :a) > 0 END AS bought_a,
+                CASE WHEN CAST(:b_id AS TEXT) IS NOT NULL THEN product_id = :b_id ELSE strpos(names, :b) > 0 END AS bought_b,
+                CASE WHEN CAST(:combo_id AS TEXT) IS NOT NULL THEN product_id = :combo_id ELSE (:combo <> '' AND strpos(names, :combo) > 0) END AS bought_combo FROM lines
         ), behavior AS (
             SELECT customer_id,
                 count(DISTINCT order_id) FILTER (WHERE bought_a AND NOT bought_b AND NOT bought_combo) AS a_orders,
@@ -734,10 +755,17 @@ def product_opportunities(
         )
         SELECT c.id, c.customer_name, c.normalized_phone, c.email,
             ca.lifetime_value, ca.order_count, ca.last_order_date,
+            ca.first_order_date, ca.average_order_value, ca.recency_days, ca.segment, ca.tags,
+            COALESCE(latest.status, 'NOT_CONTACTED') AS follow_up_status,
+            latest.channel AS follow_up_channel, latest.contacted_by AS last_follow_up_by,
+            latest.contacted_at AS last_follow_up_at, latest.next_follow_up_at,
+            latest.sentiment AS latest_sentiment, latest.purchase_intent AS latest_purchase_intent,
+            latest.offer_interest AS latest_offer_interest, latest.feedback_tags AS latest_feedback_tags,
+            latest.expected_order_date AS latest_expected_order_date,
             h.a_orders, h.b_orders, h.a_last, h.b_last
         FROM behavior h JOIN customers c ON c.id = h.customer_id
         JOIN customer_analysis ca ON ca.customer_id = c.id
-        LEFT JOIN LATERAL (SELECT status FROM customer_follow_ups WHERE customer_id = c.id
+        LEFT JOIN LATERAL (SELECT * FROM customer_follow_ups WHERE customer_id = c.id
             ORDER BY contacted_at DESC, id DESC LIMIT 1) latest ON TRUE
         WHERE h.a_orders > 0 AND NOT h.ever_bought_combo
           AND COALESCE(latest.status, '') <> 'DO_NOT_CONTACT'
@@ -752,7 +780,8 @@ def product_opportunities(
               c.normalized_phone, c.email)), lower(:search)) > 0)
         ORDER BY ca.last_order_date DESC, ca.lifetime_value DESC, c.id
     """
-    return summarized_page(sql, {"a": a, "b": b, "combo": excluded, "mode": mode, "search": search},
+    return summarized_page(sql, {"a": a, "b": b, "combo": excluded, "a_id": a_id, "b_id": b_id,
+                               "combo_id": combo_id, "mode": mode, "search": search},
                            limit, offset, "COALESCE(sum(lifetime_value), 0) AS lifetime_value, "
                            "count(*) FILTER (WHERE a_orders >= 2) AS repeat_a, "
                            "COALESCE(sum(a_orders), 0) AS a_orders")
