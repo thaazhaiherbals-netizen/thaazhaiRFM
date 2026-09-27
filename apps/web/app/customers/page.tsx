@@ -124,7 +124,14 @@ export default async function Customers({ searchParams }: {
     api<SegmentData>("/admin/customer-segments"),
   ]);
   return <Shell title="Customers" subtitle="Prioritize retention, second purchases and win-back">
-    <SupportSummary />
+    <ListSummary title={productSearch ? "Product buyer overview" : "Customer overview"}
+      description={productSearch ? `Customers matching ${productSearch} in ${minProductOrders}+ separate orders per product (${productMatch === "all" ? "all products" : "any product"}). Figures reflect all active filters and all pages.` : "All customers matching the current filters, across every page."}
+      cards={[
+        { label: "Customers", value: data.total, hint: "Matching customer profiles" },
+        { label: "Repeat customers", value: data.summary.repeat_customers, hint: "2+ orders across any products" },
+        { label: "Lifetime value", value: data.summary.lifetime_value, money: true, hint: "All-product spend by these customers" },
+        { label: "Lifetime orders", value: data.summary.orders, hint: "All-product orders by these customers" },
+      ]} />
     <section className="segment-overview">
       <div className="segment-overview-heading">
         <div><p className="section-kicker">Customer opportunity</p>
@@ -216,14 +223,7 @@ export default async function Customers({ searchParams }: {
       <button className="button">Apply</button>
       <Link className="button" href="/customers">Clear filters</Link>
     </form>
-    <ListSummary title={productSearch ? "Product buyer overview" : "Customer overview"}
-      description={productSearch ? `Customers matching ${productSearch} in ${minProductOrders}+ separate orders per product (${productMatch === "all" ? "all products" : "any product"}). Figures reflect all active filters and all pages.` : "All customers matching the current filters, across every page."}
-      cards={[
-        { label: "Customers", value: data.total, hint: "Matching customer profiles" },
-        { label: "Repeat customers", value: data.summary.repeat_customers, hint: "2+ orders across any products" },
-        { label: "Lifetime value", value: data.summary.lifetime_value, money: true, hint: "All-product spend by these customers" },
-        { label: "Lifetime orders", value: data.summary.orders, hint: "All-product orders by these customers" },
-      ]} />
+    <SupportSummary />
     <CustomerTable canWrite={canWrite || role === "support"} customers={data.items} sort={sort} direction={direction}
       search={search} followUpStatus={followUpStatus} segment={segment} tag={tag}
       salesSignal={salesSignal} productSearch={productSearch} minProductOrders={minProductOrders} productMatch={productMatch} />

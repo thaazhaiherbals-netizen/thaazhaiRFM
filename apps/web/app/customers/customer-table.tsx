@@ -220,13 +220,20 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
   error?: string; notice?: string; toggleCustomer: () => void;
   saveFollowUp: (data: FormData) => Promise<boolean>;
 }) {
+  const [ordersExpanded, setOrdersExpanded] = useState(false);
   return <>
-    <tr className={`expandable-row customer-band-${tone} ${expanded ? "expanded" : ""}`}>
-      <td><button className="button primary feedback-action" onClick={toggleCustomer} aria-haspopup="dialog"
+    <tr className={`expandable-row customer-band-${tone} ${ordersExpanded ? "expanded" : ""}`}
+      onClick={event => {
+        if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+        setOrdersExpanded(value => !value);
+      }}>
+      <td><button className="button primary feedback-action" onClick={event => { event.stopPropagation(); toggleCustomer(); }} aria-haspopup="dialog"
         aria-label={`Customer follow-up for ${customer.customer_name || "customer"}`}>
         {canWrite ? "Customer follow-up" : "View follow-ups"}</button></td>
-      <td><button className="row-button" onClick={toggleCustomer}>
-        {customer.customer_name || "Unknown"}</button><small>{customer.email}</small>
+      <td><button className="row-button customer-orders-toggle" onClick={() => setOrdersExpanded(value => !value)}
+        aria-expanded={ordersExpanded} aria-controls={`customer-orders-${customer.id}`}>
+        <span aria-hidden="true">{ordersExpanded ? "−" : "+"} </span>{customer.customer_name || "Unknown"}
+        <small>{ordersExpanded ? "Hide orders" : "View orders"}</small></button><small>{customer.email}</small>
         {customer.product_purchases?.map(purchase => <small className="purchase-evidence" key={purchase.product}>
           <strong>{purchase.product}: {purchase.orders} orders</strong> · Last: {purchase.last_purchase}</small>)}</td>
       <td><SegmentBadge customer={customer} /></td>
@@ -236,6 +243,11 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
       <td><strong className="money-highlight">{money(customer.lifetime_value)}</strong></td>
       <td><FollowUpBadge customer={customer} /></td>
     </tr>
+    {ordersExpanded && <tr className="customer-orders-expansion"><td colSpan={9}>
+      <div className="customer-orders-inline" id={`customer-orders-${customer.id}`}>
+        <CustomerOrderHistory customerId={customer.id} cached={detail} />
+      </div>
+    </td></tr>}
     {expanded && <FeedbackDialog name={customer.customer_name || "Customer"}
       phone={customer.normalized_phone} onClose={toggleCustomer} saving={saving}>
       <div className="feedback-workspace">
@@ -264,6 +276,32 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
       </div>
     </FeedbackDialog>}
   </>;
+}
+
+function CustomerOrderHistory({ customerId, cached }: { customerId: string; cached?: CustomerDetail }) {
+  const [data, setData] = useState<CustomerDetail | undefined>(cached);
+  const [error, setError] = useState<string>();
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (cached) { setData(cached); return; }
+    const controller = new AbortController();
+    setError(undefined);
+    async function load() {
+      try {
+        const response = await fetch(`/api/customers/${customerId}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Could not load this customer's orders.");
+        const result: CustomerDetail = await response.json();
+        if (!controller.signal.aborted) setData(result);
+      } catch (reason) {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load orders.");
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [customerId, cached, retry]);
+  if (error) return <div role="alert"><p>{error}</p><button className="button" onClick={() => setRetry(value => value + 1)}>Try again</button></div>;
+  if (!data) return <p role="status">Loading customer orders…</p>;
+  return <PurchaseHistory orders={data.orders} />;
 }
 
 function PurchaseHistory({ orders }: { orders: Order[] }) {
