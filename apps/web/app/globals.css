@@ -612,6 +612,50 @@ button.support-order { width: 100%; text-align: left; cursor: pointer; color: va
 .feedback-workspace .feedback-options label { min-height: 48px; }
 .feedback-workspace .follow-up-form > .button { grid-column: 1 / -1; }
 .segment-pill { white-space: normal; }
+/* Separate CRM context, data entry and past activity with named color sections. */
+.feedback-workspace .customer-contact-block { padding: 0; border: 0; background: transparent;
+  display: grid; gap: 24px; min-width: 0; }
+.crm-overview { padding: 20px; border: 1px solid #b9cfe8; border-top: 5px solid #34669e;
+  border-radius: 12px; background: #edf4fc; }
+.crm-section-heading { margin-bottom: 18px; }
+.crm-section-heading > span { font-size: 13px; font-weight: 800; letter-spacing: .7px;
+  text-transform: uppercase; color: #345879; }
+.crm-section-heading h3 { margin: 4px 0 6px; font-size: 22px; }
+.crm-section-heading p { margin: 0; color: #435b70; }
+.crm-overview .customer-analysis-strip { background: #fff; border-color: #cbd9e9; padding: 16px; }
+.crm-current-status { padding: 16px; border: 1px solid #cbd9e9; border-radius: 8px; background: #f8fbff;
+  display: grid; gap: 10px; }
+.crm-current-status > strong { color: #274f7c; }
+.feedback-workspace .customer-contact-block .follow-up-panel { padding: 22px; margin: 0;
+  border: 1px solid #b8d6c4; border-top: 5px solid #176b4d; border-radius: 12px; background: #f1f8f3; }
+.feedback-workspace .follow-up-heading > div > span { color: #176b4d; }
+.feedback-workspace .follow-up-heading h3 { font-size: 24px; }
+.feedback-workspace .follow-up-form { border-bottom: 0; padding-bottom: 0; gap: 20px; }
+.crm-form-section { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 18px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+  border: 1px solid; border-left-width: 5px; border-radius: 10px; }
+.crm-form-section > legend { padding: 6px 12px; border: 1px solid; border-radius: 7px;
+  font-size: 17px; font-weight: 800; }
+.crm-contact { background: #edf4ff; border-color: #aac5e8; border-left-color: #356bb2; }
+.crm-contact > legend { background: #dbe9fd; border-color: #aac5e8; color: #214f8b; }
+.crm-feedback { background: #fff8e8; border-color: #e4cb8c; border-left-color: #aa7514; }
+.crm-feedback > legend { background: #f9eac0; border-color: #e4cb8c; color: #73500e; }
+.crm-next { background: #f2edfc; border-color: #cbb9e9; border-left-color: #7950a7; }
+.crm-next > legend { background: #e6dcf6; border-color: #cbb9e9; color: #613989; }
+.crm-section-help { grid-column: 1 / -1; margin: 0; color: #45564c; }
+.crm-feedback .feedback-options { background: #fffdf7; border-color: #e4cb8c; }
+.crm-feedback .feedback-options label { background: #fff3d7; }
+.feedback-workspace .follow-up-history { margin: 0; padding: 22px; border: 1px solid #cbb9e9;
+  border-top: 5px solid #7950a7; border-radius: 12px; background: #f4effb; }
+.follow-up-history .crm-section-heading > span { color: #694395; }
+.follow-up-history .crm-section-heading p { color: #625474; }
+.feedback-workspace .follow-up-history article { background: #fff; border: 1px solid #ddcfea;
+  border-left: 4px solid #a282c4; }
+.feedback-workspace .customer-orders-block { background: #edf7f4; border-color: #bddace;
+  border-top: 5px solid #247762; }
+.customer-orders-block .block-heading { border-bottom-color: #bddace; }
+.customer-orders-block .support-order-detail { background: #fff; padding: 16px; border: 1px solid #c7ded3;
+  border-top: 4px solid #247762; border-radius: 10px; }
 @media (max-width: 1000px) {
   .support-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .feedback-workspace { grid-template-columns: 1fr; }
@@ -624,4 +668,7 @@ button.support-order { width: 100%; text-align: left; cursor: pointer; color: va
   .feedback-workspace { padding: 12px; }
   .feedback-workspace .rich-follow-up-form, .feedback-workspace .feedback-options { grid-template-columns: 1fr; }
   .order-filters label { width: 100%; }
+  .crm-form-section { grid-template-columns: 1fr; padding: 12px; }
+  .crm-overview, .feedback-workspace .customer-contact-block .follow-up-panel,
+  .feedback-workspace .follow-up-history { padding: 14px; }
 }

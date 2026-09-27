@@ -218,8 +218,8 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
   return <>
     <tr className={`expandable-row customer-band-${tone} ${expanded ? "expanded" : ""}`}>
       <td><button className="button primary feedback-action" onClick={toggleCustomer} aria-haspopup="dialog"
-        aria-label={`Open feedback for ${customer.customer_name || "customer"}`}>
-        {canWrite ? "Record feedback" : "View feedback"}</button></td>
+        aria-label={`Customer follow-up for ${customer.customer_name || "customer"}`}>
+        {canWrite ? "Customer follow-up" : "View follow-ups"}</button></td>
       <td><button className="row-button" onClick={toggleCustomer}>
         {customer.customer_name || "Unknown"}</button><small>{customer.email}</small></td>
       <td><SegmentBadge customer={customer} /></td>
@@ -238,6 +238,9 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
         {detail && <>
           <PurchaseHistory orders={detail.orders} />
           <section className="customer-contact-block">
+            <section className="crm-overview" aria-label="Customer overview">
+            <header className="crm-section-heading"><span>Customer profile</span><h3>Customer overview</h3>
+              <p>Purchase behaviour and the latest follow-up status.</p></header>
             <div className="customer-analysis-strip">
               <div><span>Sales group</span><SegmentBadge customer={customer} /></div>
               <div><span>Last purchase</span><strong>{customer.recency_days} days ago</strong></div>
@@ -245,6 +248,8 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
               <div className="customer-tags"><span>Why this customer matters</span><div>
                 {customer.tags.map(tag => <em key={tag}>{tagLabels[tag] || tag}</em>)}</div></div>
             </div>
+            <div className="crm-current-status"><strong>Latest follow-up</strong><FollowUpBadge customer={customer} /></div>
+            </section>
             <FollowUpPanel canWrite={canWrite} customer={customer} history={detail.follow_ups || []}
               saving={saving} onSave={saveFollowUp} />
           </section>
@@ -331,7 +336,7 @@ function FeedbackDialog({ name, phone, children, onClose, saving }: {
     onCancel={event => { event.preventDefault(); close(); }}
     onChange={() => { dirty.current = true; }} onReset={() => { dirty.current = false; }}>
     <header className="feedback-dialog-header"><div><h2 id="feedback-title">{name}</h2>
-      <p>{phone || "No phone number recorded"} · Customer feedback</p></div>
+      <p>{phone || "No phone number recorded"} · Customer follow-up</p></div>
       <button className="button" autoFocus disabled={saving} onClick={close}>Close</button></header>
     {children}
   </dialog>, document.body);
@@ -384,14 +389,16 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
     ["RESULTS_NOT_SEEN", "Has not seen results"],
     ["READY_TO_REORDER", "Ready to order again"],
   ];
-  return <section className="follow-up-panel">
+  return <>
+    <section className="follow-up-panel" aria-label="Log a follow-up">
     <div className="follow-up-heading">
-      <div><span>Customer conversation</span><h3>{canWrite ? "Record what happened after the call" : "Explore the follow-up form"}</h3>
-        <p>Structured answers help the whole team choose the right next action.</p></div>
-      <FollowUpBadge customer={customer} />
+      <div><span>New activity</span><h3>{canWrite ? "Log a follow-up" : "Follow-up form preview"}</h3>
+        <p>Capture the conversation, customer feedback and next action.</p></div>
     </div>
     {!canWrite && <p className="viewer-form-notice">View-only preview: you can try the fields below to learn how follow-ups work. Nothing you enter here will be saved.</p>}
     <form className="follow-up-form rich-follow-up-form" onSubmit={submit}>
+      <fieldset className="crm-form-section crm-contact"><legend>1. Contact details</legend>
+      <p className="crm-section-help">Who made contact and what happened?</p>
       <label><span>Call result</span><select name="status" required defaultValue="CONTACTED">
         <option value="CONTACTED">Spoke to customer</option>
         <option value="NO_ANSWER">No answer</option>
@@ -406,11 +413,24 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
       </select></label>
       <label><span>Team member</span><input name="contacted_by" required minLength={2}
         maxLength={100} placeholder="Your name" /></label>
+      </fieldset>
+      <fieldset className="crm-form-section crm-feedback"><legend>2. Customer feedback</legend>
+      <p className="crm-section-help">Record the customer's experience and concerns.</p>
       <label><span>Customer feeling</span><select name="sentiment" defaultValue="NOT_RECORDED">
         <option value="NOT_RECORDED">Not discussed</option>
         <option value="POSITIVE">Positive</option><option value="NEUTRAL">Neutral</option>
         <option value="MIXED">Mixed</option><option value="NEGATIVE">Negative</option>
       </select></label>
+      <fieldset className="feedback-options"><legend>What did the customer say?</legend>
+        {feedbackOptions.map(([value, label]) => <label key={value}>
+          <input type="checkbox" name="feedback_tags" value={value} /><span>{label}</span>
+        </label>)}
+      </fieldset>
+      <label className="follow-up-notes"><span>Call notes or full concern</span><textarea name="notes"
+        maxLength={1000} placeholder="Write the important details for the next team member" /></label>
+      </fieldset>
+      <fieldset className="crm-form-section crm-next"><legend>3. Next action</legend>
+      <p className="crm-section-help">Plan the next conversation and purchase opportunity.</p>
       <label><span>Chance of next order</span><select name="purchase_intent" defaultValue="UNKNOWN">
         <option value="UNKNOWN">Not discussed</option>
         <option value="HIGH">Likely to order soon</option>
@@ -419,23 +439,18 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
         <option value="NONE">Does not plan to order</option>
       </select></label>
       <label><span>Expected order date</span><input name="expected_order_date" type="date" /></label>
-      <label><span>Next follow-up</span><input name="next_follow_up_at"
-        type="datetime-local" /></label>
+      <label><span>Next follow-up</span><input name="next_follow_up_at" type="datetime-local" /></label>
       <label className="offer-interest-check"><input name="offer_interest" value="yes"
         type="checkbox" /><span>Customer wants an offer or discount</span></label>
-      <fieldset className="feedback-options"><legend>What did the customer say?</legend>
-        {feedbackOptions.map(([value, label]) => <label key={value}>
-          <input type="checkbox" name="feedback_tags" value={value} /><span>{label}</span>
-        </label>)}
       </fieldset>
-      <label className="follow-up-notes"><span>Call notes or full concern</span><textarea name="notes"
-        maxLength={1000} placeholder="Write the important details for the next team member" /></label>
       <button className="button primary" disabled={!canWrite || saving}
         title={!canWrite ? "Customer support or administrator access is required to save call results" : undefined}>
-        {!canWrite ? "Save call result (view only)" : saving ? "Saving call..." : "Save call result"}</button>
+        {!canWrite ? "Save follow-up (view only)" : saving ? "Saving follow-up..." : "Save follow-up"}</button>
     </form>
-    <div className="follow-up-history">
-      <strong>Previous customer conversations</strong>
+    </section>
+    <section className="follow-up-history" aria-label="Follow-up history">
+      <header className="crm-section-heading"><span>Activity timeline</span><h3>Follow-up history</h3>
+        <p>Review previous conversations and agreed next steps.</p></header>
       {history.length === 0 ? <p>No follow-up recorded yet.</p> :
         history.slice(0, 10).map(item => <article key={item.id}>
           <span className={`follow-up-pill ${item.status.toLowerCase()}`}>
@@ -454,6 +469,6 @@ function FollowUpPanel({ customer, history, saving, onSave, canWrite }: {
             </div>
             {item.notes && <p>{item.notes}</p>}</div>
         </article>)}
-    </div>
-  </section>;
+    </section>
+  </>;
 }
