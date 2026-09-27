@@ -56,7 +56,7 @@ export function accessStatus(role: Role | null, method = "GET", path = ""): 200 
     const read = ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
     if (read && (/^\/(?:api\/)?customers(?:\/[a-zA-Z0-9_-]+)?$/.test(route)
       || /^\/(?:api\/)?orders\/[a-zA-Z0-9_-]+$/.test(route)
-      || route === "/admin/customer-segments" || route === "/admin/support-summary")) return 200;
+      || ["/admin/customer-segments", "/admin/support-summary", "/admin/product-options", "/admin/product-opportunities"].includes(route))) return 200;
     if (method.toUpperCase() === "POST"
       && /^\/(?:admin|api)\/customers\/[a-zA-Z0-9_-]+\/follow-ups$/.test(route)) return 200;
     return 403;

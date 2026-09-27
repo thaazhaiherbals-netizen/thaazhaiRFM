@@ -35,6 +35,75 @@ def process_all(client, engine):
     assert jobs.run_next_job(engine)
 
 
+def test_filtered_summaries_cover_every_page(client, engine):
+    insert_raw(engine, payload("summary-one", total=500))
+    insert_raw(engine, payload("summary-two", total=250))
+    process_all(client, engine)
+    page = client.get("/orders?limit=1").json()
+    assert len(page["items"]) == 1
+    assert page["summary"]["total"] == 2
+    assert float(page["summary"]["revenue"]) == 750
+    assert float(page["summary"]["average_order_value"]) == 375
+    assert page["summary"]["customers"] == 1
+    filtered = client.get("/orders?search=summary-one").json()
+    assert float(filtered["summary"]["revenue"]) == 500
+    empty = client.get("/orders?start_date=2099-01-01").json()
+    assert empty["summary"]["total"] == 0
+    assert float(empty["summary"]["revenue"]) == 0
+    customers = client.get("/customers").json()
+    assert customers["summary"]["repeat_customers"] == 1
+    assert float(customers["summary"]["lifetime_value"]) == 750
+
+
+def add_product_order(engine, name, phone, products):
+    insert_raw(engine, payload(name, phone=phone, total=100 * len(products), products=[
+        {"product": product, "variant": "100ml", "quantity": 3, "unit_price": 100}
+        for product in products
+    ]))
+
+
+def test_product_repeat_filters_count_orders_not_units_or_lines(client, engine):
+    add_product_order(engine, "repeat-a1", "9000000101", ["Aloe Gel", "Aloe Gel"])
+    add_product_order(engine, "repeat-a2", "9000000101", ["Aloe Gel", "Shampoo"])
+    add_product_order(engine, "repeat-a3", "9000000101", ["Shampoo"])
+    add_product_order(engine, "single-a1", "9000000102", ["Aloe Gel", "Aloe Gel"])
+    process_all(client, engine)
+    page = client.get("/customers?product_search=ALOE&min_product_orders=2").json()
+    assert page["total"] == 1
+    assert page["items"][0]["normalized_phone"].endswith("9000000101")
+    assert page["items"][0]["product_purchases"][0]["orders"] == 2
+    assert client.get("/customers?product_search=aloe,shampoo&product_match=all").json()["total"] == 1
+    assert client.get("/customers?product_search=aloe,missing&product_match=all").json()["total"] == 0
+    assert client.get("/customers?product_search=aloe,missing&product_match=any").json()["total"] == 1
+    assert client.get("/customers?product_search=aloe&min_product_orders=1").json()["total"] == 2
+    assert client.get("/customers?product_search=aloe&min_product_orders=3").json()["total"] == 0
+
+
+def test_combo_and_cross_sell_opportunities(client, engine):
+    for suffix, phone, products in [
+        ("separate-a", "9000000201", ["Aloe Gel"]), ("separate-b", "9000000201", ["Hair Colour"]),
+        ("same-order", "9000000202", ["Aloe Gel", "Hair Colour"]),
+        ("combo-a", "9000000203", ["Aloe Gel"]), ("combo-b", "9000000203", ["Hair Colour"]),
+        ("combo-c", "9000000203", ["Aloe Hair Combo"]),
+        ("only-a", "9000000204", ["Aloe Gel"]), ("dnc-a", "9000000205", ["Aloe Gel"]),
+    ]:
+        add_product_order(engine, suffix, phone, products)
+    process_all(client, engine)
+    dnc = client.get("/customers?search=9000000205").json()["items"][0]["id"]
+    client.post(f"/admin/customers/{dnc}/follow-ups", json={"status": "DO_NOT_CONTACT", "contacted_by": "Test agent"})
+    query = "/admin/product-opportunities?product_a=aloe%20gel&product_b=hair%20colour&combo=aloe%20hair%20combo"
+    data = client.get(query).json()
+    assert data["total"] == 1
+    assert data["items"][0]["normalized_phone"].endswith("9000000201")
+    assert data["items"][0]["a_orders"] == data["items"][0]["b_orders"] == 1
+    cross = client.get(query + "&mode=cross_sell").json()
+    assert cross["total"] == 1
+    assert cross["items"][0]["normalized_phone"].endswith("9000000204")
+    assert client.get(query + "&search=no-such-customer").json()["total"] == 0
+    assert client.get("/admin/product-opportunities?product_a=aloe&product_b=aloe").status_code == 422
+    assert "Aloe Gel" in client.get("/admin/product-options").json()
+
+
 def test_order_date_range_includes_boundaries_and_preserves_search(client, engine):
     for name, day in [("early", "April 2, 2026"), ("match-a", "April 3, 2026"),
                       ("match-b", "April 4, 2026"), ("late", "April 5, 2026")]:

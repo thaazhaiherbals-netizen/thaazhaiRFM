@@ -1,6 +1,9 @@
 # Orders and customer support usability
 
 - Orders accept inclusive from/to dates alongside search. Sorting and pagination retain the range; invalid ranges show an error and empty results have guidance.
+- Orders and Customers show filtered summary cards calculated in PostgreSQL across all matching rows, independently of pagination. Customer lifetime values cover all products, including when a product filter is active.
+- Product purchase behaviour supports up to five comma-separated, case-insensitive product terms, any/all matching, and minimum distinct-order thresholds (default two). Counts and latest purchases appear next to each matching customer; quantities and duplicate lines never inflate purchase frequency.
+- Product opportunities is a searchable audience builder available to admins, viewers and support. Combo mode requires A-only and B-only product lines on different orders; cross-sell requires A and no historical B. An optional combo keyword excludes its previous buyers, and latest do-not-contact profiles are excluded. Product-name suggestions come from recorded purchases, not an independently maintained combo catalogue. Values are historical spending, not revenue forecasts. It does not send campaigns or change customer data.
 - Today, Yesterday, This week and This month shortcuts use India time (Monday-start weeks, week/month through today). Shortcuts retain the applied search and sorting, and reset pagination. Custom dates remain available. Order numbers expand customer and product details beneath the row without navigation, with loading, retry and empty states.
 - Support figures appear on the executive dashboard and customer screen. They cover all customers and team members, independent of list filters, using Asia/Kolkata calendar days.
 - People contacted counts distinct customers with a result other than no answer today. Positive/negative counts are conversation records with that sentiment today. Scheduled counts customers whose latest record schedules a follow-up today, excluding do-not-contact customers and superseded schedules.
@@ -9,5 +12,6 @@
 - Shared small text is raised to 14px, key controls and table text to 16px, with larger control targets and visible keyboard focus.
 
 Validation: production Next.js build, TypeScript, 11 authorization tests, production HTTP smoke for admin/viewer/support, and 8 PostgreSQL operations tests. Regression coverage includes inclusive dates, search/pagination, invalid dates, distinct contacts, sentiment totals, India midnight, and replaced schedules.
+Audience and summary validation adds PostgreSQL tests for pagination-independent totals, filtered/empty summaries, product frequency vs units/lines, any/all matching, separate-order combos, prior-combo exclusion and do-not-contact handling (11 operations tests in total).
 
 Limitations: browser visual inspection was blocked because the desktop browser automation sandbox failed to start. Review desktop/mobile layout and modal keyboard interaction before release. Backend and web changes must be released together; no schema migration is needed. Delivery remains feature PR to develop, followed by develop to main for production.

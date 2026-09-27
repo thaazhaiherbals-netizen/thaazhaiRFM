@@ -14,7 +14,9 @@ const fixtures = {
  "/admin/unmapped-products":{items:[{source_system:"HOSTINGER",raw_product_name:"Sample soap",affected_items:1,affected_orders:1,item_revenue:"100",mapping_error:"No match"}],total:1},
  "/admin/products":{items:[],total:0},
  "/admin/customers/c1/follow-ups":{id:"f1"},
- "/customers":{items:[customer],total:1},
+ "/customers":{items:[customer],total:1,summary:{repeat_customers:0,lifetime_value:"500",orders:1}},
+ "/admin/product-options":["Aloe Gel","Hair Colour"],
+ "/admin/product-opportunities":{items:[],total:0,summary:{lifetime_value:"0",repeat_a:0,a_orders:0}},
  "/admin/customer-segments":{segments:[],thresholds:{high_value:"500",vip_value:"1000",latest_order_date:"2026-09-22"},settings:{new_customer_days:30,active_customer_days:90,champion_recency_days:60,champion_min_orders:3,high_value_percentile:".75",vip_value_percentile:".9"}},
  "/customers/c1":{customer,orders:[],follow_ups:[]},
 };
@@ -82,6 +84,10 @@ const fixtures = {
   assert.ok(supportHtml.includes("People contacted"));
   assert.ok(supportHtml.includes("Scheduled for today"));
   assert.ok(supportHtml.includes("Customer follow-up"));
+  assert.ok(supportHtml.includes("Product purchase behaviour"));
+  const opportunities = await fetch(base+"/customers/opportunities?product_a=aloe&product_b=hair",{headers:{cookie:support}});
+  assert.equal(opportunities.status,200);
+  assert.ok((await opportunities.text()).includes("Combo audience"));
   assert.ok(!supportHtml.includes("Save group rules"));
   for (const href of ["/ingestion", "/jobs", "/mappings", "/orders"])
     assert.ok(!supportHtml.includes('href="'+href+'"'));

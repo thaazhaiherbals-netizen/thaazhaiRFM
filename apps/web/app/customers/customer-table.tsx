@@ -18,6 +18,7 @@ export type Customer = {
   latest_sentiment?: string; latest_feedback_tags?: string[];
   latest_purchase_intent?: string; latest_offer_interest?: boolean;
   latest_expected_order_date?: string;
+  product_purchases?: { product: string; orders: number; last_purchase: string }[];
 };
 type Order = {
   id: string; source_record_id: string; order_date: string; order_value: string;
@@ -80,10 +81,11 @@ const formatDateTime = (value?: string) => value
   : "";
 
 export function CustomerTable({ customers, sort, direction, search, followUpStatus,
-  segment, tag, salesSignal, canWrite }: {
+  segment, tag, salesSignal, canWrite, productSearch, minProductOrders, productMatch }: {
   canWrite: boolean;
   customers: Customer[]; sort: string; direction: string; search: string;
   followUpStatus: string; segment: string; tag: string; salesSignal: string;
+  productSearch: string; minProductOrders: string; productMatch: string;
 }) {
   const router = useRouter();
   function sortHref(column: string) {
@@ -96,6 +98,9 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
     if (segment) query.set("segment", segment);
     if (tag) query.set("tag", tag);
     if (salesSignal) query.set("sales_signal", salesSignal);
+    if (productSearch) {
+      query.set("product_search", productSearch); query.set("min_product_orders", minProductOrders); query.set("product_match", productMatch);
+    }
     return `/customers?${query.toString()}`;
   }
   function sortLabel(label: string, column: string) {
@@ -193,7 +198,7 @@ export function CustomerTable({ customers, sort, direction, search, followUpStat
       <th>{sortLabel("Orders", "order_count")}</th>
       <th>{sortLabel("Lifetime value", "lifetime_value")}</th>
       <th>{sortLabel("Follow-up", "last_follow_up_at")}</th></tr></thead>
-    <tbody>{customers.map((baseCustomer, index) => {
+    <tbody>{!customers.length && <tr><td colSpan={9}>No customers match these filters. Try a broader product name or a lower purchase threshold.</td></tr>}{customers.map((baseCustomer, index) => {
       const customer = { ...baseCustomer, ...followUpOverrides[baseCustomer.id] };
       const expanded = openCustomer === customer.id;
       const detail = customerDetails[customer.id];
@@ -221,7 +226,9 @@ function CustomerRows({ customer, expanded, tone, detail, loading,
         aria-label={`Customer follow-up for ${customer.customer_name || "customer"}`}>
         {canWrite ? "Customer follow-up" : "View follow-ups"}</button></td>
       <td><button className="row-button" onClick={toggleCustomer}>
-        {customer.customer_name || "Unknown"}</button><small>{customer.email}</small></td>
+        {customer.customer_name || "Unknown"}</button><small>{customer.email}</small>
+        {customer.product_purchases?.map(purchase => <small className="purchase-evidence" key={purchase.product}>
+          <strong>{purchase.product}: {purchase.orders} orders</strong> · Last: {purchase.last_purchase}</small>)}</td>
       <td><SegmentBadge customer={customer} /></td>
       <td>{customer.normalized_phone}</td><td>{customer.first_order_date}</td>
       <td>{customer.last_order_date}</td><td><span className="count-badge">
