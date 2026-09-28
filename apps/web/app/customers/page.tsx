@@ -128,7 +128,7 @@ export default async function Customers({ searchParams }: {
     api<Page<Customer> & { summary: { repeat_customers: number; lifetime_value: string; orders: number } }>(`/customers?limit=${limit}&offset=${offset}&${query}`),
     api<SegmentData>("/admin/customer-segments"),
   ]);
-  return <Shell title="Customers" subtitle="Prioritize retention, second purchases and win-back">
+  return <Shell title="Lead Centre" subtitle="Prioritize retention, second purchases and win-back">
     <ListSummary title={productSearch ? "Product buyer overview" : "Customer overview"}
       description={productSearch ? `Customers matching ${productSearch} in ${minProductOrders}+ separate orders per product (${productMatch === "all" ? "all products" : "any product"}). Figures reflect all active filters and all pages.` : "All customers matching the current filters, across every page."}
       cards={[

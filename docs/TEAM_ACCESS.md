@@ -33,15 +33,16 @@ Auth tests exercise the actual session code, proxy, API data layer, Server Actio
 
 The third login code, SUPPORT_UI_TOKEN, is for the customer support team.
 Support can search/filter customers, inspect groups and order details, and save
-customer follow-ups. Support cannot access the dashboard, orders list, ingestion,
-jobs or mappings, or change bucket configuration. Existing viewer access remains
+customer follow-ups. Support can also view the dashboard, orders list and Marketing reports.
+Support cannot access ingestion, jobs or mappings, or change bucket configuration. Existing viewer access remains
 read-only. Administrators retain full access.
 
 Set SUPPORT_UI_TOKEN on the web service only, using a distinct random secret.
 A local code has been generated in apps/web/.env.local (ignored by Git).
-Restart the web service after changing it. For production, add a separate random
-SUPPORT_UI_TOKEN to the web service environment and deploy this branch.
-The support login opens /customers. The code is a website login credential;
+Restart the web service after changing it. For production, set SUPPORT_UI_TOKEN
+in the Railway web service environment; it is never included in a commit or PR.
+Deploy through the normal main-branch release after merging the access changes.
+The support login opens Lead Centre (/customers). The code is a website login credential;
 it is not accepted as a bearer token by the Python API.
 
 Support permissions are allowlisted in the proxy and independently in the server

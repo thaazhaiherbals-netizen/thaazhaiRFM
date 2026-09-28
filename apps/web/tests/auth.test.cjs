@@ -155,17 +155,17 @@ test("support data access permits customer work and rejects all other routes bef
   const originalFetch = global.fetch;
   global.fetch = async (...args) => { calls.push(args); return Response.json({ ok: true }); };
   try {
-    for (const route of ["/customers?limit=50", "/customers/c1", "/orders/o1", "/admin/customer-segments"])
+    for (const route of ["/customers?limit=50", "/customers/c1", "/orders/o1", "/admin/customer-segments", "/orders", "/admin/analytics", "/admin/performance", "/admin/marketing/overview", "/admin/marketing/campaigns", "/admin/marketing/campaigns/c1", "/admin/marketing/sync-runs"])
       await api(route);
     await api("/admin/customers/c1/follow-ups", { method: "POST" });
-    for (const route of ["/orders", "/admin/jobs", "/admin/ingestion", "/analytics/summary",
+    for (const route of ["/admin/product-aliases", "/admin/unmapped-products", "/admin/products", "/admin/jobs", "/admin/ingestion", "/analytics/summary",
       "/customers/../admin", "/customers/%2e%2e", "/admin/customer-segment-settings"])
       await assert.rejects(api(route), /Administrator/);
     for (const route of ["/admin/jobs/process-pending", "/admin/product-aliases", "/admin/customer-segment-settings"])
       for (const method of ["POST", "PUT", "PATCH", "DELETE"])
         await assert.rejects(api(route, { method }), /Administrator/);
     await assert.rejects(api("/admin/customers/c1/follow-ups", { method: "DELETE" }), /Administrator/);
-    assert.equal(calls.length, 5);
+    assert.equal(calls.length, 12);
     const actions = load("app/actions.ts");
     for (const name of ["startJob", "retryOrder", "correctDate", "saveMapping", "saveSegmentSettings"])
       await assert.rejects(actions[name](new FormData()), /Administrator/);
@@ -173,7 +173,7 @@ test("support data access permits customer work and rejects all other routes bef
     const result = await route.POST({ json: async () => ({ notes: "Called customer" }) },
       { params: Promise.resolve({ id: "c1" }) });
     assert.equal(result.status, 201);
-    assert.equal(calls.length, 6);
+    assert.equal(calls.length, 13);
     await actions.logout();
     assert.equal(cookie, undefined);
   } finally { global.fetch = originalFetch; }
@@ -185,9 +185,9 @@ test("support proxy restricts pages and API methods; login lands on customers", 
     nextUrl: { pathname }, url: "https://example.test" + pathname, method,
     cookies: { get: () => ({ value: cookie }) },
   });
-  for (const page of ["/customers", "/customers/c1", "/orders/o1", "/api/customers/c1"])
+  for (const page of ["/", "/orders", "/marketing", "/marketing/campaigns/c1", "/customers", "/customers/c1", "/orders/o1", "/api/customers/c1"])
     assert.equal(proxy(request(page)).status, 200);
-  for (const page of ["/", "/orders", "/ingestion", "/jobs", "/mappings"])
+  for (const page of ["/ingestion", "/jobs", "/mappings"])
     assert.equal(proxy(request(page)).url, "https://example.test/customers");
   assert.equal(proxy(request("/api/customers/c1/follow-ups", "POST")).status, 200);
   assert.equal(proxy(request("/api/customers/c1/follow-ups", "DELETE")).status, 403);

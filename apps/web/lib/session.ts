@@ -55,8 +55,10 @@ export function accessStatus(role: Role | null, method = "GET", path = ""): 200 
     const route = path.split("?")[0];
     const read = ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
     if (read && (/^\/(?:api\/)?customers(?:\/[a-zA-Z0-9_-]+)?$/.test(route)
-      || /^\/(?:api\/)?orders\/[a-zA-Z0-9_-]+$/.test(route)
-      || ["/admin/customer-segments", "/admin/support-summary", "/admin/product-options", "/admin/product-opportunities"].includes(route))) return 200;
+      || /^\/(?:api\/)?orders(?:\/[a-zA-Z0-9_-]+)?$/.test(route)
+      || /^\/marketing(?:\/campaigns\/[a-zA-Z0-9_-]+)?$/.test(route)
+      || /^\/admin\/marketing\/campaigns\/[a-zA-Z0-9_-]+$/.test(route)
+      || ["/", "/admin/analytics", "/admin/performance", "/admin/marketing/overview", "/admin/marketing/campaigns", "/admin/marketing/sync-runs", "/admin/customer-segments", "/admin/support-summary", "/admin/product-options", "/admin/product-opportunities"].includes(route))) return 200;
     if (method.toUpperCase() === "POST"
       && /^\/(?:admin|api)\/customers\/[a-zA-Z0-9_-]+\/follow-ups$/.test(route)) return 200;
     return 403;

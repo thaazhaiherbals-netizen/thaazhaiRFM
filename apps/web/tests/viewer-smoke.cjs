@@ -81,6 +81,8 @@ const fixtures = {
   assert.equal(customerRes.status,200);
   const supportHtml=(await customerRes.text()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,"");
   assert.ok(supportHtml.includes("Customer support access"));
+  assert.ok(supportHtml.includes("Lead Centre"));
+  for (const href of ["/", "/orders", "/marketing"]) assert.ok(supportHtml.includes('href="'+href+'"'));
   assert.ok(supportHtml.includes("People contacted"));
   assert.ok(supportHtml.includes("Scheduled for today"));
   assert.ok(supportHtml.includes("Customer follow-up"));
@@ -94,9 +96,9 @@ const fixtures = {
   assert.ok(opportunitiesHtml.includes("Customer follow-up"));
   assert.ok(opportunitiesHtml.includes("View orders"));
   assert.ok(!supportHtml.includes("Save group rules"));
-  for (const href of ["/ingestion", "/jobs", "/mappings", "/orders"])
+  for (const href of ["/ingestion", "/jobs", "/mappings"])
     assert.ok(!supportHtml.includes('href="'+href+'"'));
-  for (const page of ["/", "/orders", "/ingestion", "/jobs", "/mappings"]) {
+  for (const page of ["/ingestion", "/jobs", "/mappings"]) {
     const res=await fetch(base+page,{headers:{cookie:support},redirect:"manual"});
     assert.equal(res.status,303);
     assert.equal(new URL(res.headers.get("location"),base).href,base+"/customers");
