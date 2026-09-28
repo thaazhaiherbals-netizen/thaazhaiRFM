@@ -30,10 +30,10 @@ export async function Shell({ title, subtitle, children }: {
   title: string; subtitle?: string; children: React.ReactNode;
 }) {
   const role = await currentRole();
-  const links: [string, string, IconName][] = role === "support" ? [["/customers", "Customers", "users"], ["/customers/opportunities", "Product opportunities", "spark"]] : [
+  const links: [string, string, IconName][] = [
     ["/", "Dashboard", "dashboard"], ["/ingestion", "Ingestion", "database"],
     ["/jobs", "Jobs", "jobs"], ["/mappings", "Mappings", "tag"],
-    ["/orders", "Orders", "bag"], ["/customers", "Customers", "users"],
+    ["/orders", "Orders", "bag"], ["/customers", "Lead Centre", "users"],
     ["/customers/opportunities", "Product opportunities", "spark"],
     ["/marketing", "Marketing", "megaphone"],
   ];
@@ -43,7 +43,7 @@ export async function Shell({ title, subtitle, children }: {
         <span className="brand-copy"><strong>thaazhai</strong><small>BUSINESS INTELLIGENCE</small></span>
       </Link>
       <div className="nav-label">Workspace</div>
-      <nav>{links.map(([href, label, icon]) => <Link href={href} key={href}>
+      <nav>{links.filter(([href]) => role !== "support" || !["/ingestion", "/jobs", "/mappings"].includes(href)).map(([href, label, icon]) => <Link href={href} key={href}>
         <Icon name={icon} size={18} /><span>{label}</span></Link>)}</nav>
       <div className="sidebar-foot"><div className="environment"><i />
         <span><strong>{process.env.NEXT_PUBLIC_APP_ENV === "production"

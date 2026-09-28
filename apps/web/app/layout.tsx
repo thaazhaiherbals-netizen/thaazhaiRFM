@@ -6,7 +6,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const role = await currentRole();
   return <html lang="en"><body>
     {role === "support" && <div className="viewer-banner" role="status">
-      <strong>Customer support access</strong> View customers and order details, and record follow-ups.
+      <strong>Customer support access</strong> Explore reports, orders and Marketing, and record follow-ups in Lead Centre.
     </div>}
     {role === "viewer" && <div className="viewer-banner" role="status">
       <strong>View-only access</strong> Explore reports, orders and customers. Changes are reserved for administrators.

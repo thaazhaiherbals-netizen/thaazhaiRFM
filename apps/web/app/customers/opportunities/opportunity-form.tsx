@@ -26,6 +26,6 @@ export function OpportunityForm({ products, initialA, initialB, initialCombo, mo
     <div className="opportunity-actions"><button className="button primary">Find opportunities</button><Link className="button" href="/customers/opportunities">Clear</Link>
       {a || b ? <Link className="button" href={`/customers?${repeat}#product-purchase-behaviour`}>Find repeat buyers of selected products</Link>
         : <span>Select a product above to find its repeat buyers.</span>}</div>
-    <small>Repeat buyers means two or more separate orders for any selected product. This opens Customers with those product filters applied.</small>
+    <small>Repeat buyers means two or more separate orders for any selected product. This opens Lead Centre with those product filters applied.</small>
   </form>;
 }
