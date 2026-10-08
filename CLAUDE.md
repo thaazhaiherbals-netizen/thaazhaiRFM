@@ -18,7 +18,8 @@ See AGENTS.md for the complete workflow.
 Thaazhai operations + analytics: an internal admin app for raw-order processing,
 customers, orders and analytics. Railway hosts the application services from this repo:
 Next.js (`apps/web`), FastAPI (`apps/api`), and a Python worker
-(`workers/order_processor`), plus a separate Meta scheduler (`workers/meta_sync`).
+(`workers/order_processor`), plus a separate Meta scheduler (`workers/meta_sync`) and a
+Node.js Shopify -> WhatsApp order notification service (`apps/notifications`, see its README).
 Supabase PostgreSQL is the current application database **and**
 the durable job queue — there is no Redis, broker, Kubernetes, or AI layer.
 
@@ -247,7 +248,8 @@ haven't verified against this version.
   Migrations 001-013 are applied locally: 010 customer follow-ups, 011 dynamic customer
   analysis, 012 customer sales configuration, 013 Meta marketing tables. Migration 013
   is applied on Supabase. Its new migration ledger records only 013; older schema
-  already exists without ledger entries. Do not blindly rerun earlier SQL. The next new migration is 014.
+  already exists without ledger entries. Do not blindly rerun earlier SQL. The next new migration is 014
+  (016 is taken by `apps/notifications`; 014/015 are reserved for in-progress catalogue work).
 - `db/seeds/*.sql` preserve existing master rows; they don't silently repair
   conflicts or overwrite metadata on rerun.
 - Alias matching normalizes case/whitespace/HTML entities but never guesses or
