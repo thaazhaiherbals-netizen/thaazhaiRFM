@@ -25,7 +25,7 @@ def test_migrations_and_seeds_are_repeatable():
         assert connection.execute(text("SELECT count(*) FROM product_variants")).scalar_one() == 25
         assert connection.execute(text("SELECT count(*) FROM product_aliases")).scalar_one() == 8
         assert connection.execute(text("SELECT count(*) FROM orders")).scalar_one() == 0
-        assert connection.execute(text("SELECT count(*) FROM schema_migrations")).scalar_one() == 16
+        assert connection.execute(text("SELECT count(*) FROM schema_migrations")).scalar_one() == 17
         assert (
             connection.execute(
                 text(
