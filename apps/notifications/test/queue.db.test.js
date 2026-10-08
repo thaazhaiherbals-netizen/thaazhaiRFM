@@ -14,7 +14,8 @@ const sqlPath = new URL('../../../db/migrations/016_order_notifications.sql', im
 
 function row(orderId, extra = {}) {
   return {
-    shop: SHOP, orderId, orderName: `#${orderId}`, topic: 'orders/create',
+    shop: SHOP, orderId, orderNumber: `#${orderId}`, customerName: 'Priya',
+    statusUrl: 'https://thaazhai.com/orders/x', topic: 'orders/create',
     webhookId: `wh-${orderId}`, recipient: '919876543210', state: 'pending', error: null, ...extra,
   };
 }

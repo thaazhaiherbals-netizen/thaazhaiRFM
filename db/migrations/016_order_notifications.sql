@@ -4,7 +4,9 @@ CREATE TABLE order_notifications (
     id BIGSERIAL PRIMARY KEY,
     shop TEXT NOT NULL,
     order_id TEXT NOT NULL,
-    order_name TEXT NOT NULL,
+    order_name TEXT NOT NULL,          -- e.g. #1001 (template variable 2)
+    customer_name TEXT NOT NULL,       -- first name (template variable 1)
+    order_status_url TEXT,             -- Shopify order status page (template variable 3)
     topic TEXT NOT NULL CHECK (topic IN ('orders/create', 'orders/fulfilled')),
     webhook_id TEXT NOT NULL,
     recipient TEXT,

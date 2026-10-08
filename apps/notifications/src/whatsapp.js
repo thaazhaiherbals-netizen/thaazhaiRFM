@@ -3,8 +3,9 @@
 
 const MAX_ATTEMPTS = 5;
 
-// The approved templates take exactly one body variable: the Shopify order name (#1001).
-export function buildMessage({ recipient, templateName, language, orderName }) {
+// The approved templates take exactly three body variables, in this order:
+//   {{1}} customer first name, {{2}} order number (#1001), {{3}} order status link.
+export function buildMessage({ recipient, templateName, language, customerName, orderNumber, statusUrl }) {
   return {
     messaging_product: 'whatsapp',
     to: recipient,
@@ -12,7 +13,16 @@ export function buildMessage({ recipient, templateName, language, orderName }) {
     template: {
       name: templateName,
       language: { code: language },
-      components: [{ type: 'body', parameters: [{ type: 'text', text: orderName }] }],
+      components: [
+        {
+          type: 'body',
+          parameters: [
+            { type: 'text', text: customerName },
+            { type: 'text', text: orderNumber },
+            { type: 'text', text: statusUrl },
+          ],
+        },
+      ],
     },
   };
 }
@@ -25,7 +35,9 @@ export async function sendTemplate(whatsapp, notification, fetchImpl = fetch) {
     recipient: notification.recipient,
     templateName: whatsapp.templates[notification.topic],
     language: whatsapp.language,
-    orderName: notification.order_name,
+    customerName: notification.customer_name,
+    orderNumber: notification.order_name,
+    statusUrl: notification.order_status_url,
   });
 
   let response;

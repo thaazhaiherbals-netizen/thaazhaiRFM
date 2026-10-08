@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { test } from 'node:test';
 
 import { loadConfig } from '../src/config.js';
-import { isFullyFulfilled, isValidSignature, readContact } from '../src/shopify.js';
+import { isFullyFulfilled, isValidSignature, readContact, readOrder } from '../src/shopify.js';
 import { SEND_SETTINGS, order } from './helpers.js';
 
 test('accepts only the exact Shopify signature', () => {
@@ -33,6 +33,23 @@ test('no recipient without a country code, no consent without the opt-in attribu
     false,
   );
   assert.equal(readContact(order({ note_attributes: undefined })).consent, false);
+});
+
+test('reads the exact order id even when it is too large for a JS number', () => {
+  // Shopify's sample order: JSON.parse turns this id into 820982911946154500.
+  const payload = JSON.parse(
+    '{"id":820982911946154508,"admin_graphql_api_id":"gid://shopify/Order/820982911946154508"}',
+  );
+  assert.equal(readOrder(payload).orderId, '820982911946154508');
+  assert.equal(readOrder({ id: 820982911946154508 }), null);
+  assert.equal(readOrder({ id: 42 }).orderId, '42');
+});
+
+test('customer name falls back to shipping/billing name, then "Customer"', () => {
+  assert.equal(readOrder(order()).customerName, 'Priya');
+  assert.equal(readOrder(order({ customer: null, shipping_address: { first_name: 'Arun' } })).customerName, 'Arun');
+  assert.equal(readOrder(order({ customer: { first_name: '  ' } })).customerName, 'Customer');
+  assert.equal(readOrder(order({ order_status_url: undefined })).statusUrl, null);
 });
 
 test('shipped message only for fully fulfilled orders', () => {

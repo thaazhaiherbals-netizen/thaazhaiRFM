@@ -1,14 +1,26 @@
 # Shopify → WhatsApp order notifications (Node.js)
 
 A small Node.js service that receives Shopify order webhooks and sends the customer an
-approved WhatsApp template message:
+approved WhatsApp template message.
 
-| Shopify event | WhatsApp template (example text) |
+Both templates take the same **three body variables, in this order**:
+
+| Variable | Value | Taken from the Shopify order |
+|---|---|---|
+| `{{1}}` | Customer first name | `customer.first_name`, else shipping, else billing first name, else "Customer" |
+| `{{2}}` | Order number, e.g. `#1001` | `name` |
+| `{{3}}` | Order status link | `order_status_url` (orders without one are skipped) |
+
+Suggested template text (Meta category **Utility**; a template may not start or end
+with a variable, so each ends with text):
+
+| Shopify event | Template text |
 |---|---|
-| `orders/create` | "Thank you! Your Thaazhai order {{1}} is confirmed." |
-| `orders/fulfilled` (fully fulfilled only) | "Your Thaazhai order {{1}} has been shipped. Thank you!" |
+| `orders/create` | Hi {{1}}, thank you for shopping with Thaazhai! Your order {{2}} is confirmed. You can check your order status here: {{3}} We will message you again when it ships. |
+| `orders/fulfilled` (fully fulfilled only) | Hi {{1}}, good news! Your Thaazhai order {{2}} has been shipped. Track it here: {{3}} Thank you for shopping with us. |
 
-`{{1}}` is the Shopify order name, e.g. `#1001`. That is the only template variable.
+When submitting each template to Meta, give sample values such as `Priya`, `#1001`,
+`https://thaazhai.com/…/orders/…/authenticate?key=…`. No header or button variables.
 
 Plain JavaScript, Node 22+, Node's built-in `http`/`crypto`/`fetch`/`node:test`, and one
 dependency (`pg`). It is independent of the Python API, worker and web app.
@@ -30,7 +42,7 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 | `src/index.js` | Entry point: reads settings, starts server (+ sender in send mode), clean shutdown |
 | `src/config.js` | All environment variables in one place; refuses to start send mode half-configured |
 | `src/server.js` | The three HTTP routes |
-| `src/shopify.js` | Signature check, reading phone + WhatsApp opt-in from an order |
+| `src/shopify.js` | Signature check; reads order id, name, number, status link, phone and opt-in |
 | `src/queue.js` | PostgreSQL queries for the queue |
 | `src/whatsapp.js` | Builds the template message, calls Meta, turns the response into a result |
 | `src/sender.js` | Background loop that sends queued notifications |
@@ -41,7 +53,9 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 - **Only Shopify, only our store:** unsigned/wrongly signed requests get 401, other stores 403.
 - **Consent:** a message is sent only when the order has the note attribute
   `whatsapp_opt_in=true` **and** an international phone (`+91…`). Otherwise the row is
-  saved as `skipped`. SMS/email marketing consent does not count.
+  saved as `skipped` with the reason in `error`. SMS/email marketing consent does not count.
+- **Exact order ids:** read from `admin_graphql_api_id`, because very large numeric ids
+  lose digits in JavaScript.
 - **Never twice:** one row per (shop, order, event). Shopify retries → `duplicate`.
 - **Nothing lost:** if the database is down the webhook gets 503 and Shopify retries later.
 - **No accidental duplicates:** if Meta times out or returns 5xx we can't know whether the
@@ -52,7 +66,7 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 | State | Meaning | Action |
 |---|---|---|
 | `pending` | Waiting to send (or waiting after a rate limit) | none |
-| `skipped` | No opt-in or no international phone | none |
+| `skipped` | No opt-in, no international phone or no status link (see `error`) | none |
 | `sending` | Being sent right now. Stuck here after a crash = unknown | check Meta |
 | `unknown` | Timeout / Meta 5xx: may or may not have been delivered | check Meta, then requeue if not sent |
 | `accepted` | Meta accepted the message (`message_id`). Not proof of delivery/read | none |
@@ -102,10 +116,13 @@ After the release PR is merged into `main`:
    Copy the signing secret shown on that page into `SHOPIFY_WEBHOOK_SECRET`.
    (Add **Order fulfillment** too if you want to inspect that event.)
 7. Test: place a test order → Railway logs show one `shopify_webhook_received` line.
+   Its `notification` field shows exactly what would be sent: `customerName`,
+   `orderNumber`, `statusUrl`, `recipient`, `consent`, `wouldSend` and `skipReason`
+   (`no_whatsapp_opt_in`, `no_international_phone` or `no_order_status_url`).
 
 ### Switching to send mode (after templates are approved)
 
-1. Meta: approved utility template(s) with one body variable, no header/button variables.
+1. Meta: approved utility template(s) with the three body variables above, no header/button variables.
 2. Shopify checkout: WhatsApp opt-in that saves note attribute `whatsapp_opt_in=true`.
 3. Review `db/migrations/016_order_notifications.sql`, then once, in the Railway service shell:
    `npm run migrate` (with `APP_ENV=production` and `DATABASE_URL` set). It applies only
