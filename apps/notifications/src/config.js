@@ -21,6 +21,13 @@ export function loadConfig(env = process.env) {
     mode,
     shopify: {
       shopDomain: (env.SHOPIFY_SHOP_DOMAIN || '').toLowerCase(),
+      // Shopify source_name values that get a message: web = website checkout,
+      // shopify_draft_order = orders the team creates in Shopify admin (manual orders).
+      // Others (pos, app ids) are skipped. Comma-separated.
+      orderSources: (env.NOTIFY_ORDER_SOURCES || 'web,shopify_draft_order')
+        .split(',')
+        .map((source) => source.trim())
+        .filter(Boolean),
       webhookSecret: env.SHOPIFY_WEBHOOK_SECRET || '',
     },
     whatsapp: {

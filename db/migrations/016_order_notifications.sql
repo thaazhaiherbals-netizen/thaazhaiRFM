@@ -6,11 +6,11 @@ CREATE TABLE order_notifications (
     order_id TEXT NOT NULL,
     order_name TEXT NOT NULL,          -- e.g. #1001 (template variable 2)
     customer_name TEXT NOT NULL,       -- first name (template variable 1)
-    order_status_url TEXT,             -- Shopify order status page (template variable 3)
+    order_status_url TEXT,             -- Shopify order status page (Track order button link)
     topic TEXT NOT NULL CHECK (topic IN ('orders/create', 'orders/fulfilled')),
     webhook_id TEXT NOT NULL,
     recipient TEXT,
-    -- pending: waiting to send | skipped: not a website order, no valid phone or no status link
+    -- pending: waiting to send | skipped: order source not enabled, no valid phone or no status link
     -- sending: claimed by the sender right now (a row stuck here after a crash = unknown)
     -- unknown: timeout/Meta 5xx, may or may not have been sent; check Meta before requeuing
     -- accepted: Meta accepted the message | failed: Meta rejected it

@@ -146,5 +146,7 @@ test('send mode refuses to start with missing or invalid settings', () => {
     /WA_HEADER_IMAGE_URL/,
   );
   assert.equal(loadConfig({}).mode, 'receive_only');
+  assert.deepEqual(loadConfig({}).shopify.orderSources, ['web', 'shopify_draft_order']);
+  assert.deepEqual(loadConfig({ NOTIFY_ORDER_SOURCES: ' web , pos ,' }).shopify.orderSources, ['web', 'pos']);
   assert.equal(loadConfig(SEND_SETTINGS).mode, 'send');
 });
