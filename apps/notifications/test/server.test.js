@@ -53,10 +53,12 @@ describe('receive_only mode', () => {
     assert.equal(logged.at(-1).notification.skipReason, 'unexpected_order_status_url');
   });
 
-  test('non-website orders are logged but would not be sent', async () => {
+  test('website and manual (admin) orders are sent; other sources are not', async () => {
+    await postWebhook(app.baseUrl, order({ source_name: 'shopify_draft_order' }));
+    assert.equal(logged.at(-1).notification.wouldSend, true);
     await postWebhook(app.baseUrl, order({ source_name: 'pos' }));
     assert.equal(logged.at(-1).notification.wouldSend, false);
-    assert.equal(logged.at(-1).notification.skipReason, 'not_website_order');
+    assert.equal(logged.at(-1).notification.skipReason, 'order_source_not_enabled');
   });
 
   test('rejects bad signatures, other stores and invalid JSON; ignores other topics', async () => {
