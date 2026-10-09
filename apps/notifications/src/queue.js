@@ -3,16 +3,27 @@
 import pg from 'pg';
 
 export function createPool(database) {
-  // Railway/Supabase URLs are plain postgres:// URLs. Strip a SQLAlchemy driver
-  // suffix (postgresql+psycopg://) in case the API's value is copied over.
-  const connectionString = database.url.replace(/^postgres(ql)?\+\w+:\/\//, 'postgresql://');
-  return new pg.Pool({
-    connectionString,
-    // Encrypt like the Python API (sslmode=require), without CA verification.
-    ssl: database.ssl ? { rejectUnauthorized: false } : undefined,
-    max: 3,
-    connectionTimeoutMillis: 5000,
-  });
+  return new pg.Pool({ ...connectionSettings(database), max: 3, connectionTimeoutMillis: 5000 });
+}
+
+// Connection string and TLS settings for pg.Pool.
+// Supabase URLs end in ?sslmode=require. pg reads that as "verify the certificate
+// fully", which fails on Supabase's own CA ("self-signed certificate in certificate
+// chain"), and URL settings override the ssl option. So TLS parameters are removed
+// from the URL and TLS is set here: encrypted, without CA verification — the same as
+// libpq's sslmode=require used by the Python API.
+export function connectionSettings(database) {
+  // Strip a SQLAlchemy driver suffix (postgresql+psycopg://) in case the API's value is copied.
+  const url = new URL(database.url.replace(/^postgres(ql)?\+\w+:\/\//, 'postgresql://'));
+  const sslmode = url.searchParams.get('sslmode');
+  for (const name of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'uselibpqcompat']) {
+    url.searchParams.delete(name);
+  }
+  const useTls = database.ssl || (sslmode !== null && sslmode !== 'disable');
+  return {
+    connectionString: url.toString(),
+    ssl: useTls ? { rejectUnauthorized: false } : undefined,
+  };
 }
 
 // Saves a notification. Returns false when this order+event was already saved
