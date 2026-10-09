@@ -41,7 +41,6 @@ describe('receive_only mode', () => {
       statusUrl: order().order_status_url,
       recipient: '919876543210',
       phoneSource: 'phone',
-      consent: true,
       wouldSend: true,
       skipReason: null,
     });
@@ -103,10 +102,10 @@ describe('send mode', () => {
     });
   });
 
-  test('records orders without opt-in as skipped', async () => {
-    const result = await postWebhook(app.baseUrl, order({ admin_graphql_api_id: 'gid://shopify/Order/1002', note_attributes: [] }));
+  test('records orders without a valid phone as skipped', async () => {
+    const result = await postWebhook(app.baseUrl, order({ admin_graphql_api_id: 'gid://shopify/Order/1002', phone: '12345' }));
     assert.deepEqual(result.body, { status: 'skipped' });
-    assert.equal(rows.get(`${SHOP}|1002|orders/create`).error, 'no_whatsapp_opt_in');
+    assert.equal(rows.get(`${SHOP}|1002|orders/create`).error, 'no_valid_phone');
   });
 
   test('shipped event is disabled until its template is configured', async () => {

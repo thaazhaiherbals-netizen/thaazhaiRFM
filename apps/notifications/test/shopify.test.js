@@ -22,10 +22,8 @@ test('accepts only the exact Shopify signature', () => {
   assert.equal(isValidSignature(body, undefined, 'secret'), false);
 });
 
-test('reads an opted-in international phone', () => {
-  assert.deepEqual(readContact(order()), {
-    recipient: '919876543210', phoneSource: 'phone', consent: true,
-  });
+test('reads an international phone', () => {
+  assert.deepEqual(readContact(order()), { recipient: '919876543210', phoneSource: 'phone' });
 });
 
 test('falls back to the shipping address phone', () => {
@@ -34,14 +32,8 @@ test('falls back to the shipping address phone', () => {
   assert.equal(contact.phoneSource, 'shipping_address');
 });
 
-test('no recipient without a country code, no consent without the opt-in attribute', () => {
+test('no recipient without a country code', () => {
   assert.equal(readContact(order({ phone: '98765 43210' })).recipient, null);
-  assert.equal(readContact(order({ note_attributes: [] })).consent, false);
-  assert.equal(
-    readContact(order({ note_attributes: [{ name: 'whatsapp_opt_in', value: 'false' }] })).consent,
-    false,
-  );
-  assert.equal(readContact(order({ note_attributes: undefined })).consent, false);
 });
 
 test('reads the exact order id even when it is too large for a JS number', () => {
@@ -128,8 +120,6 @@ test('reads the first live website order the same way it will be sent', () => {
     statusUrl: live.order_status_url,
     recipient: '919876543210',
     phoneSource: 'phone',
-    // The live checkout does not yet ask for WhatsApp opt-in.
-    consent: false,
   });
 });
 

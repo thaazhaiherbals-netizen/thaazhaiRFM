@@ -31,7 +31,6 @@ export function order(extra = {}) {
     order_status_url: 'https://thaazhai.com/81506271484/orders/abc/authenticate?key=xyz',
     customer: { first_name: 'Priya' },
     phone: '+91 98765 43210',
-    note_attributes: [{ name: 'whatsapp_opt_in', value: 'true' }],
     ...extra,
   };
 }

@@ -42,7 +42,7 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 | `src/index.js` | Entry point: reads settings, starts server (+ sender in send mode), clean shutdown |
 | `src/config.js` | All environment variables in one place; refuses to start send mode half-configured |
 | `src/server.js` | The three HTTP routes |
-| `src/shopify.js` | Signature check; reads order id, name, number, status link, phone and opt-in |
+| `src/shopify.js` | Signature check; reads order id, name, number, status link and phone |
 | `src/queue.js` | PostgreSQL queries for the queue |
 | `src/whatsapp.js` | Builds the template message, calls Meta, turns the response into a result |
 | `src/sender.js` | Background loop that sends queued notifications |
@@ -59,9 +59,9 @@ Shopify ──POST /webhooks/shopify──▶ server.js
   through to the next. Shopify stores address phones as typed (`9243023483`), so an
   Indian 10-digit mobile gets the `91` prefix (for `phone`, the shipping/billing country
   is used); any other number without a country code is skipped, never guessed.
-- **Consent:** a message is sent only when the order has the note attribute
-  `whatsapp_opt_in=true` **and** a valid phone. Otherwise the row is saved as `skipped`
-  with the reason in `error`. SMS/email marketing consent does not count.
+- **Consent:** no separate WhatsApp opt-in. The Shopify checkout phone field will state
+  that order updates are sent to that number, so giving the number is the consent.
+  Orders without a valid phone are saved as `skipped` with the reason in `error`.
 - **Exact order ids:** read from `admin_graphql_api_id`, because very large numeric ids
   lose digits in JavaScript.
 - **Never twice:** one row per (shop, order, event). Shopify retries → `duplicate`.
@@ -74,7 +74,7 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 | State | Meaning | Action |
 |---|---|---|
 | `pending` | Waiting to send (or waiting after a rate limit) | none |
-| `skipped` | Not a website order, no opt-in, no valid phone or no status link (see `error`) | none |
+| `skipped` | Not a website order, no valid phone or no status link (see `error`) | none |
 | `sending` | Being sent right now. Stuck here after a crash = unknown | check Meta |
 | `unknown` | Timeout / Meta 5xx: may or may not have been delivered | check Meta, then requeue if not sent |
 | `accepted` | Meta accepted the message (`message_id`). Not proof of delivery/read | none |
@@ -125,13 +125,13 @@ After the release PR is merged into `main`:
    (Add **Order fulfillment** too if you want to inspect that event.)
 7. Test: place a test order → Railway logs show one `shopify_webhook_received` line.
    Its `notification` field shows exactly what would be sent: `source`, `customerName`,
-   `orderNumber`, `statusUrl`, `recipient`, `phoneSource`, `consent`, `wouldSend` and `skipReason`
-   (`not_website_order`, `no_whatsapp_opt_in`, `no_valid_phone` or `no_order_status_url`).
+   `orderNumber`, `statusUrl`, `recipient`, `phoneSource`, `wouldSend` and `skipReason`
+   (`not_website_order`, `no_valid_phone` or `no_order_status_url`).
 
 ### Switching to send mode (after templates are approved)
 
 1. Meta: approved utility template(s) with the three body variables above, no header/button variables.
-2. Shopify checkout: WhatsApp opt-in that saves note attribute `whatsapp_opt_in=true`.
+2. Shopify checkout: phone field text saying order updates are sent to this number on WhatsApp.
 3. Review `db/migrations/016_order_notifications.sql`, then once, in the Railway service shell:
    `npm run migrate` (with `APP_ENV=production` and `DATABASE_URL` set). It applies only
    016 and records it in `schema_migrations`; running it again is harmless.
@@ -173,6 +173,6 @@ Container check, from the repo root: `docker build -f apps/notifications/Dockerf
 
 ## Not done yet
 
-No Railway service, Shopify webhook, Meta template, checkout opt-in or production
+No Railway service, Shopify webhook, Meta template, checkout phone consent text or production
 migration has been set up by this code. Later upgrades: Meta delivery/read callbacks,
 a team view of the queue in the admin app, and a retention policy for old rows.

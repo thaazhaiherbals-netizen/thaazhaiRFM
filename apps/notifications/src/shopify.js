@@ -54,14 +54,9 @@ function readCustomerName(order) {
 }
 
 // recipient: see toWhatsAppNumber() below; phoneSource: the field it came from.
-// consent: true only when checkout saved the note attribute whatsapp_opt_in=true.
-// SMS/email marketing consent is NOT treated as WhatsApp consent.
+// No separate WhatsApp opt-in is required: the checkout phone field will say that order
+// updates are sent to that number, so giving a phone number is the consent.
 export function readContact(order) {
-  const noteAttributes = Array.isArray(order.note_attributes) ? order.note_attributes : [];
-  const consent = noteAttributes.some(
-    (attribute) =>
-      attribute?.name === 'whatsapp_opt_in' && String(attribute.value).toLowerCase() === 'true',
-  );
 
   // First valid number wins, so a blank or mistyped number in one place falls through.
   const shipping = order.shipping_address;
@@ -87,7 +82,7 @@ export function readContact(order) {
     }
   }
 
-  return { recipient, phoneSource, consent };
+  return { recipient, phoneSource };
 }
 
 // Phone in WhatsApp format (digits only, country code first) or null.

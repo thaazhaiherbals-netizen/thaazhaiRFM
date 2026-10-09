@@ -10,7 +10,7 @@ CREATE TABLE order_notifications (
     topic TEXT NOT NULL CHECK (topic IN ('orders/create', 'orders/fulfilled')),
     webhook_id TEXT NOT NULL,
     recipient TEXT,
-    -- pending: waiting to send | skipped: no opt-in or no international phone
+    -- pending: waiting to send | skipped: not a website order, no valid phone or no status link
     -- sending: claimed by the sender right now (a row stuck here after a crash = unknown)
     -- unknown: timeout/Meta 5xx, may or may not have been sent; check Meta before requeuing
     -- accepted: Meta accepted the message | failed: Meta rejected it
