@@ -8,6 +8,7 @@ import {
   isValidSignature,
   readContact,
   readOrder,
+  statusButtonPath,
   toWhatsAppNumber,
 } from '../src/shopify.js';
 import { SEND_SETTINGS, order } from './helpers.js';
@@ -123,6 +124,14 @@ test('reads the first live website order the same way it will be sent', () => {
   });
 });
 
+test('button path is the status link after the fixed base URL', () => {
+  const base = 'https://thaazhai.com/81506271484/orders/';
+  assert.equal(statusButtonPath(`${base}77ec/authenticate?key=d93c`, base), '77ec/authenticate?key=d93c');
+  assert.equal(statusButtonPath('https://thaazhai-fn1psxft.myshopify.com/orders/77ec', base), null);
+  assert.equal(statusButtonPath(base, base), null);
+  assert.equal(statusButtonPath(null, base), null);
+});
+
 test('shipped message only for fully fulfilled orders', () => {
   assert.equal(isFullyFulfilled({ fulfillment_status: 'fulfilled' }), true);
   assert.equal(isFullyFulfilled({ fulfillment_status: 'partial' }), false);
@@ -132,6 +141,10 @@ test('send mode refuses to start with missing or invalid settings', () => {
   assert.throws(() => loadConfig({ NOTIFICATION_MODE: 'send' }), /DATABASE_URL/);
   assert.throws(() => loadConfig({ ...SEND_SETTINGS, WA_GRAPH_VERSION: '21' }), /WA_GRAPH_VERSION/);
   assert.throws(() => loadConfig({ NOTIFICATION_MODE: 'live' }), /NOTIFICATION_MODE/);
+  assert.throws(
+    () => loadConfig({ ...SEND_SETTINGS, WA_HEADER_IMAGE_URL: 'http://example.com/logo.jpg' }),
+    /WA_HEADER_IMAGE_URL/,
+  );
   assert.equal(loadConfig({}).mode, 'receive_only');
   assert.equal(loadConfig(SEND_SETTINGS).mode, 'send');
 });

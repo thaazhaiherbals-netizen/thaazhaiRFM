@@ -6,7 +6,7 @@ import http from 'node:http';
 
 import { TEMPLATE_VARIABLES, shopifyConfigured } from './config.js';
 import { checkQueue, enqueue } from './queue.js';
-import { isFullyFulfilled, isValidSignature, readOrder } from './shopify.js';
+import { isFullyFulfilled, isValidSignature, readOrder, statusButtonPath } from './shopify.js';
 
 const MAX_BODY_BYTES = 2_000_000;
 
@@ -82,7 +82,8 @@ async function shopifyWebhook({ req, config, pool, log }) {
   const order = payload && typeof payload === 'object' ? readOrder(payload) : null;
   if (!order) throw new HttpError(400, 'Invalid order payload');
   const webhookId = req.headers['x-shopify-webhook-id'] || '';
-  const skipReason = whySkipped(order);
+  const buttonPath = statusButtonPath(order.statusUrl, config.whatsapp.statusButtonBaseUrl);
+  const skipReason = whySkipped(order, buttonPath);
 
   // 3a. receive_only mode: log the event plus what WOULD be sent, without sending.
   // The payload contains customer details, so Railway log access must stay restricted.
@@ -92,7 +93,7 @@ async function shopifyWebhook({ req, config, pool, log }) {
       topic,
       shop: shopDomain,
       webhookId,
-      notification: { ...order, wouldSend: !skipReason, skipReason },
+      notification: { ...order, buttonPath, wouldSend: !skipReason, skipReason },
       payload,
     }));
     return { status: 'logged' };
@@ -125,10 +126,11 @@ async function shopifyWebhook({ req, config, pool, log }) {
 }
 
 // null when the message can be sent, otherwise the reason it is not sent.
-function whySkipped(order) {
+function whySkipped(order, buttonPath) {
   if (order.source !== 'web') return 'not_website_order';
   if (!order.recipient) return 'no_valid_phone';
   if (!order.statusUrl) return 'no_order_status_url';
+  if (!buttonPath) return 'unexpected_order_status_url';
   return null;
 }
 
