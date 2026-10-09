@@ -90,6 +90,9 @@ Shopify ──POST /webhooks/shopify──▶ server.js
   through to the next. Shopify stores address phones as typed (`9243023483`), so an
   Indian 10-digit mobile gets the `91` prefix (for `phone`, the shipping/billing country
   is used); any other number without a country code is skipped, never guessed.
+- **Test switch:** while `WA_TEST_RECIPIENTS` is set (e.g. `919876543210,919…`), only
+  those numbers get messages; every other order is saved as `skipped`
+  (`not_a_test_recipient`) and is **not** sent later. Clear it to go live for everyone.
 - **Consent:** no separate WhatsApp opt-in. The Shopify checkout phone field will state
   that order updates are sent to that number, so giving the number is the consent.
   Orders without a valid phone are saved as `skipped` with the reason in `error`.
@@ -158,7 +161,7 @@ After the release PR is merged into `main`:
    Its `notification` field shows exactly what would be sent: `source`, `customerName`,
    `orderNumber`, `statusUrl`, `recipient`, `phoneSource`, `buttonPath`, `wouldSend` and
    `skipReason` (`order_source_not_enabled`, `no_valid_phone`, `no_order_status_url` or
-   `unexpected_order_status_url`).
+   `unexpected_order_status_url` or `not_a_test_recipient`).
 
 ### Switching to send mode (after templates are approved)
 
@@ -183,6 +186,7 @@ After the release PR is merged into `main`:
    WA_HEADER_IMAGE_URL=https://cdn.shopify.com/s/files/1/0815/0627/1484/files/THAAZHAI_LOGO.jpg?v=1791356834
    WA_STATUS_BUTTON_BASE_URL=https://thaazhai.com/81506271484/orders/   # optional, this is the default
    NOTIFY_ORDER_SOURCES=web,shopify_draft_order   # optional, this is the default
+   WA_TEST_RECIPIENTS=91XXXXXXXXXX  # first test only: just your number; remove to go live
    WA_SHIPPED_TEMPLATE=<only once approved>
    ```
 

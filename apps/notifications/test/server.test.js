@@ -111,6 +111,23 @@ describe('send mode', () => {
     });
   });
 
+  test('with WA_TEST_RECIPIENTS set, only those numbers are queued for sending', async () => {
+    const testing = await start({
+      config: testConfig({ ...SEND_SETTINGS, WA_TEST_RECIPIENTS: '+91 98765 43210' }),
+      pool,
+      sender: { isRunning: () => true },
+    });
+    const mine = await postWebhook(testing.baseUrl, order({ admin_graphql_api_id: 'gid://shopify/Order/3001' }));
+    assert.deepEqual(mine.body, { status: 'pending' });
+    const customer = await postWebhook(
+      testing.baseUrl,
+      order({ admin_graphql_api_id: 'gid://shopify/Order/3002', phone: '+919000000001' }),
+    );
+    assert.deepEqual(customer.body, { status: 'skipped' });
+    assert.equal(rows.get(`${SHOP}|3002|orders/create`).error, 'not_a_test_recipient');
+    testing.server.close();
+  });
+
   test('records orders without a valid phone as skipped', async () => {
     const result = await postWebhook(app.baseUrl, order({ admin_graphql_api_id: 'gid://shopify/Order/1002', phone: '12345' }));
     assert.deepEqual(result.body, { status: 'skipped' });
