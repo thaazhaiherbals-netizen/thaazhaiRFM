@@ -28,6 +28,10 @@ export function loadConfig(env = process.env) {
       phoneNumberId: env.WA_PHONE_NUMBER_ID || '',
       graphVersion: env.WA_GRAPH_VERSION || '',
       language: env.WA_TEMPLATE_LANGUAGE || 'en',
+      // Fixed start of the template's "Track order" button link, exactly as entered in
+      // WhatsApp Manager (before {{1}}). Each order's link must start with it.
+      statusButtonBaseUrl:
+        env.WA_STATUS_BUTTON_BASE_URL || 'https://thaazhai.com/81506271484/orders/',
       templates: {
         'orders/create': env.WA_ORDER_TEMPLATE || '',
         // Optional: leave unset until the shipped template is approved.

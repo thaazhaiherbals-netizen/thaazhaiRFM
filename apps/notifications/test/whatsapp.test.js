@@ -10,7 +10,7 @@ const notification = {
   recipient: '919876543210',
   customer_name: 'Priya',
   order_name: '#1001',
-  order_status_url: 'https://thaazhai.com/orders/abc',
+  order_status_url: 'https://thaazhai.com/81506271484/orders/abc123/authenticate?key=k9',
   attempts: 1,
 };
 
@@ -23,7 +23,7 @@ function fakeFetch(status, body = {}) {
   return { calls, fetchImpl };
 }
 
-test('sends name, order number and status link in that order, and records the message id', async () => {
+test('sends name and order number in the body, status path in the button, records the message id', async () => {
   const { calls, fetchImpl } = fakeFetch(200, { messages: [{ id: 'wamid.1' }] });
   const outcome = await sendTemplate(whatsapp, notification, fetchImpl);
 
@@ -43,12 +43,26 @@ test('sends name, order number and status link in that order, and records the me
           parameters: [
             { type: 'text', text: 'Priya' },
             { type: 'text', text: '#1001' },
-            { type: 'text', text: 'https://thaazhai.com/orders/abc' },
           ],
+        },
+        {
+          type: 'button',
+          sub_type: 'url',
+          index: '0',
+          parameters: [{ type: 'text', text: 'abc123/authenticate?key=k9' }],
         },
       ],
     },
   });
+});
+
+test('a status link that does not match the button base URL is not sent', async () => {
+  const { calls, fetchImpl } = fakeFetch(200, { messages: [{ id: 'wamid.1' }] });
+  const other = { ...notification, order_status_url: 'https://other.example/orders/abc' };
+  assert.deepEqual(await sendTemplate(whatsapp, other, fetchImpl), {
+    state: 'failed', error: 'unexpected_order_status_url',
+  });
+  assert.equal(calls.length, 0);
 });
 
 test('rate limit retries later with growing delay, then fails', async () => {

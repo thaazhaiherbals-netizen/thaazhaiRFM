@@ -8,6 +8,7 @@ import {
   isValidSignature,
   readContact,
   readOrder,
+  statusButtonPath,
   toWhatsAppNumber,
 } from '../src/shopify.js';
 import { SEND_SETTINGS, order } from './helpers.js';
@@ -121,6 +122,14 @@ test('reads the first live website order the same way it will be sent', () => {
     recipient: '919876543210',
     phoneSource: 'phone',
   });
+});
+
+test('button path is the status link after the fixed base URL', () => {
+  const base = 'https://thaazhai.com/81506271484/orders/';
+  assert.equal(statusButtonPath(`${base}77ec/authenticate?key=d93c`, base), '77ec/authenticate?key=d93c');
+  assert.equal(statusButtonPath('https://thaazhai-fn1psxft.myshopify.com/orders/77ec', base), null);
+  assert.equal(statusButtonPath(base, base), null);
+  assert.equal(statusButtonPath(null, base), null);
 });
 
 test('shipped message only for fully fulfilled orders', () => {

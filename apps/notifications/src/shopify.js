@@ -25,7 +25,7 @@ export function readOrder(order) {
     customerName: readCustomerName(order),
     // Template variable {{2}}: the order number customers see, e.g. #1001.
     orderNumber: String(order.name || `#${order.order_number || orderId}`),
-    // Template variable {{3}}: Shopify order status page for this order.
+    // Order status page; its end goes into the "Track order" button link.
     statusUrl: typeof order.order_status_url === 'string' ? order.order_status_url : null,
     ...readContact(order),
   };
@@ -97,6 +97,14 @@ export function toWhatsAppNumber(rawPhone, countryCode) {
     if (mobile) return `91${mobile[1]}`;
   }
   return null;
+}
+
+// The part of the order status link after the button's fixed base URL, e.g.
+// "77ec…/authenticate?key=d93c…". null when the link does not start with that base
+// (then the button would open the wrong page, so nothing is sent).
+export function statusButtonPath(statusUrl, baseUrl) {
+  if (!statusUrl || !baseUrl || !statusUrl.startsWith(baseUrl)) return null;
+  return statusUrl.slice(baseUrl.length) || null;
 }
 
 // The "shipped" message is only for fully fulfilled orders.
