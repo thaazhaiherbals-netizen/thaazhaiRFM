@@ -35,7 +35,7 @@ export function createServer({ config, pool = null, sender = null, log = console
       reply(res, 200, result);
     } catch (error) {
       if (!(error instanceof HttpError)) {
-        log.error(JSON.stringify({ event: 'request_error', message: error.message }));
+        log.error(JSON.stringify({ message: `request error: ${error.message}`, event: 'request_error' }));
       }
       reply(res, error.status || 500, { error: error.status ? error.message : 'Internal error' });
     }
@@ -118,11 +118,19 @@ async function shopifyWebhook({ req, config, pool, log }) {
     });
   } catch (error) {
     // A non-200 answer makes Shopify retry the webhook later, so nothing is lost.
-    log.error(JSON.stringify({ event: 'enqueue_error', message: error.message }));
+    log.error(JSON.stringify({
+      message: `could not save ${order.orderNumber}: ${error.message}`,
+      event: 'enqueue_error', orderNumber: order.orderNumber,
+    }));
     throw new HttpError(503, 'Queue unavailable; retry delivery');
   }
-  if (!saved) return { status: 'duplicate' };
-  return { status: skipReason ? 'skipped' : 'pending' };
+  const status = !saved ? 'duplicate' : skipReason ? 'skipped' : 'pending';
+  // One line per order so every webhook can be traced in the logs (no phone or name).
+  log.info(JSON.stringify({
+    message: `${topic} ${order.orderNumber}: ${status}${skipReason ? ` (${skipReason})` : ''}`,
+    event: 'webhook_handled', topic, webhookId, orderNumber: order.orderNumber, status, skipReason,
+  }));
+  return { status };
 }
 
 // null when the message can be sent, otherwise the reason it is not sent.
