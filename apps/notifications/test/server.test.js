@@ -28,11 +28,28 @@ describe('receive_only mode', () => {
     });
   });
 
-  test('logs a signed order event without sending anything', async () => {
+  test('logs a signed order event and what would be sent, without sending', async () => {
     const result = await postWebhook(app.baseUrl, order());
     assert.deepEqual(result, { status: 200, body: { status: 'logged' } });
     assert.equal(logged.at(-1).event, 'shopify_webhook_received');
     assert.equal(logged.at(-1).payload.name, '#1001');
+    assert.deepEqual(logged.at(-1).notification, {
+      orderId: '1001',
+      source: 'web',
+      customerName: 'Priya',
+      orderNumber: '#1001',
+      statusUrl: order().order_status_url,
+      recipient: '919876543210',
+      phoneSource: 'phone',
+      wouldSend: true,
+      skipReason: null,
+    });
+  });
+
+  test('non-website orders are logged but would not be sent', async () => {
+    await postWebhook(app.baseUrl, order({ source_name: 'pos' }));
+    assert.equal(logged.at(-1).notification.wouldSend, false);
+    assert.equal(logged.at(-1).notification.skipReason, 'not_website_order');
   });
 
   test('rejects bad signatures, other stores and invalid JSON; ignores other topics', async () => {
@@ -57,9 +74,10 @@ describe('send mode', () => {
   const pool = {
     async query(sql, params) {
       if (sql.includes('INSERT INTO order_notifications')) {
-        const key = `${params[0]}|${params[1]}|${params[3]}`;
+        const [shop, orderId, orderNumber, customerName, statusUrl, topic, , recipient, state, error] = params;
+        const key = `${shop}|${orderId}|${topic}`;
         if (rows.has(key)) return { rowCount: 0, rows: [] };
-        rows.set(key, { shop: params[0], recipient: params[5], state: params[6] });
+        rows.set(key, { orderNumber, customerName, statusUrl, recipient, state, error });
         return { rowCount: 1, rows: [{ id: rows.size }] };
       }
       return { rowCount: 0, rows: [] };
@@ -75,13 +93,19 @@ describe('send mode', () => {
     assert.deepEqual((await postWebhook(app.baseUrl, order())).body, { status: 'pending' });
     assert.deepEqual((await postWebhook(app.baseUrl, order(), { 'x-shopify-webhook-id': 'retry' })).body, { status: 'duplicate' });
     assert.deepEqual(rows.get(`${SHOP}|1001|orders/create`), {
-      shop: SHOP, recipient: '919876543210', state: 'pending',
+      orderNumber: '#1001',
+      customerName: 'Priya',
+      statusUrl: order().order_status_url,
+      recipient: '919876543210',
+      state: 'pending',
+      error: null,
     });
   });
 
-  test('records orders without opt-in as skipped', async () => {
-    const result = await postWebhook(app.baseUrl, order({ id: 1002, note_attributes: [] }));
+  test('records orders without a valid phone as skipped', async () => {
+    const result = await postWebhook(app.baseUrl, order({ admin_graphql_api_id: 'gid://shopify/Order/1002', phone: '12345' }));
     assert.deepEqual(result.body, { status: 'skipped' });
+    assert.equal(rows.get(`${SHOP}|1002|orders/create`).error, 'no_valid_phone');
   });
 
   test('shipped event is disabled until its template is configured', async () => {

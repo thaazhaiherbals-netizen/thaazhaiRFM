@@ -5,7 +5,14 @@ import { sendTemplate } from '../src/whatsapp.js';
 import { SEND_SETTINGS, testConfig } from './helpers.js';
 
 const { whatsapp } = testConfig(SEND_SETTINGS);
-const notification = { topic: 'orders/create', recipient: '919876543210', order_name: '#1001', attempts: 1 };
+const notification = {
+  topic: 'orders/create',
+  recipient: '919876543210',
+  customer_name: 'Priya',
+  order_name: '#1001',
+  order_status_url: 'https://thaazhai.com/orders/abc',
+  attempts: 1,
+};
 
 function fakeFetch(status, body = {}) {
   const calls = [];
@@ -16,7 +23,7 @@ function fakeFetch(status, body = {}) {
   return { calls, fetchImpl };
 }
 
-test('sends the approved template with the order name and records the message id', async () => {
+test('sends name, order number and status link in that order, and records the message id', async () => {
   const { calls, fetchImpl } = fakeFetch(200, { messages: [{ id: 'wamid.1' }] });
   const outcome = await sendTemplate(whatsapp, notification, fetchImpl);
 
@@ -30,7 +37,16 @@ test('sends the approved template with the order name and records the message id
     template: {
       name: 'order_confirmed',
       language: { code: 'en' },
-      components: [{ type: 'body', parameters: [{ type: 'text', text: '#1001' }] }],
+      components: [
+        {
+          type: 'body',
+          parameters: [
+            { type: 'text', text: 'Priya' },
+            { type: 'text', text: '#1001' },
+            { type: 'text', text: 'https://thaazhai.com/orders/abc' },
+          ],
+        },
+      ],
     },
   });
 });
