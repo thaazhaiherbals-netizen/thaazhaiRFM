@@ -27,6 +27,7 @@ export function order(extra = {}) {
     id: 1001,
     admin_graphql_api_id: 'gid://shopify/Order/1001',
     name: '#1001',
+    source_name: 'web',
     order_status_url: 'https://thaazhai.com/81506271484/orders/abc/authenticate?key=xyz',
     customer: { first_name: 'Priya' },
     phone: '+91 98765 43210',

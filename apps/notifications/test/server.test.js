@@ -35,6 +35,7 @@ describe('receive_only mode', () => {
     assert.equal(logged.at(-1).payload.name, '#1001');
     assert.deepEqual(logged.at(-1).notification, {
       orderId: '1001',
+      source: 'web',
       customerName: 'Priya',
       orderNumber: '#1001',
       statusUrl: order().order_status_url,
@@ -43,6 +44,12 @@ describe('receive_only mode', () => {
       wouldSend: true,
       skipReason: null,
     });
+  });
+
+  test('non-website orders are logged but would not be sent', async () => {
+    await postWebhook(app.baseUrl, order({ source_name: 'pos' }));
+    assert.equal(logged.at(-1).notification.wouldSend, false);
+    assert.equal(logged.at(-1).notification.skipReason, 'not_website_order');
   });
 
   test('rejects bad signatures, other stores and invalid JSON; ignores other topics', async () => {

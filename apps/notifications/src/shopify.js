@@ -19,6 +19,8 @@ export function readOrder(order) {
   if (!orderId) return null;
   return {
     orderId,
+    // Only storefront orders get a message ("web"); POS, draft and app orders do not.
+    source: typeof order.source_name === 'string' ? order.source_name : null,
     // Template variable {{1}}: customer's first name.
     customerName: readCustomerName(order),
     // Template variable {{2}}: the order number customers see, e.g. #1001.
@@ -38,17 +40,20 @@ function readOrderId(order) {
   return Number.isSafeInteger(order.id) ? String(order.id) : null;
 }
 
+// The shipping address is who receives the parcel, so its name is used first.
 function readCustomerName(order) {
+  const shipping = order.shipping_address;
   const name =
+    shipping?.first_name ||
+    String(shipping?.name || '').trim().split(/\s+/)[0] ||
     order.customer?.first_name ||
-    order.shipping_address?.first_name ||
     order.billing_address?.first_name ||
     '';
   // Meta rejects empty template variables, so fall back to a neutral word.
   return String(name).trim() || 'Customer';
 }
 
-// recipient: phone in WhatsApp format (digits only, country code first) or null.
+// recipient: see toWhatsAppNumber() below.
 // consent: true only when checkout saved the note attribute whatsapp_opt_in=true.
 // SMS/email marketing consent is NOT treated as WhatsApp consent.
 export function readContact(order) {
@@ -58,13 +63,27 @@ export function readContact(order) {
       attribute?.name === 'whatsapp_opt_in' && String(attribute.value).toLowerCase() === 'true',
   );
 
-  const rawPhone = order.phone || order.shipping_address?.phone || '';
-  const phone = String(rawPhone).replace(/[\s().-]/g, '');
-  // International format only (+ country code + number). Without a country code we
-  // cannot be sure who we would be messaging, so the order is skipped instead.
-  const recipient = /^\+[1-9]\d{7,14}$/.test(phone) ? phone.slice(1) : null;
+  // Shipping address phone first (the person receiving the parcel), then the order phone.
+  const shipping = order.shipping_address;
+  const recipient =
+    toWhatsAppNumber(shipping?.phone, shipping?.country_code) ||
+    toWhatsAppNumber(order.phone, shipping?.country_code);
 
   return { recipient, consent };
+}
+
+// Phone in WhatsApp format (digits only, country code first) or null.
+// Shopify keeps address phones as typed, e.g. "9243023483" without +91. For an Indian
+// address a 10-digit mobile (optionally with a leading 0 or 91) is given the 91 prefix.
+// Any other number without a country code is rejected rather than guessed.
+export function toWhatsAppNumber(rawPhone, countryCode) {
+  const phone = String(rawPhone || '').replace(/[\s().-]/g, '');
+  if (/^\+[1-9]\d{7,14}$/.test(phone)) return phone.slice(1);
+  if (String(countryCode || '').toUpperCase() === 'IN') {
+    const mobile = /^(?:0|91)?([6-9]\d{9})$/.exec(phone);
+    if (mobile) return `91${mobile[1]}`;
+  }
+  return null;
 }
 
 // The "shipped" message is only for fully fulfilled orders.

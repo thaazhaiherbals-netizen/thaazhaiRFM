@@ -3,7 +3,13 @@ import crypto from 'node:crypto';
 import { test } from 'node:test';
 
 import { loadConfig } from '../src/config.js';
-import { isFullyFulfilled, isValidSignature, readContact, readOrder } from '../src/shopify.js';
+import {
+  isFullyFulfilled,
+  isValidSignature,
+  readContact,
+  readOrder,
+  toWhatsAppNumber,
+} from '../src/shopify.js';
 import { SEND_SETTINGS, order } from './helpers.js';
 
 test('accepts only the exact Shopify signature', () => {
@@ -45,11 +51,55 @@ test('reads the exact order id even when it is too large for a JS number', () =>
   assert.equal(readOrder({ id: 42 }).orderId, '42');
 });
 
-test('customer name falls back to shipping/billing name, then "Customer"', () => {
+test('customer name: shipping first name, shipping name, customer, then "Customer"', () => {
   assert.equal(readOrder(order()).customerName, 'Priya');
-  assert.equal(readOrder(order({ customer: null, shipping_address: { first_name: 'Arun' } })).customerName, 'Arun');
+  assert.equal(readOrder(order({ shipping_address: { first_name: 'Arun' } })).customerName, 'Arun');
+  assert.equal(readOrder(order({ shipping_address: { name: ' Meena K ' } })).customerName, 'Meena');
   assert.equal(readOrder(order({ customer: { first_name: '  ' } })).customerName, 'Customer');
   assert.equal(readOrder(order({ order_status_url: undefined })).statusUrl, null);
+});
+
+test('Indian address phones without +91 get the 91 prefix; others need a country code', () => {
+  assert.equal(toWhatsAppNumber('9243023483', 'IN'), '919243023483');
+  assert.equal(toWhatsAppNumber('09243023483', 'IN'), '919243023483');
+  assert.equal(toWhatsAppNumber('919243023483', 'IN'), '919243023483');
+  assert.equal(toWhatsAppNumber('+44 7700 900123', 'IN'), '447700900123');
+  assert.equal(toWhatsAppNumber('9243023483', 'US'), null);
+  assert.equal(toWhatsAppNumber('12345', 'IN'), null);
+  assert.equal(toWhatsAppNumber(null, 'IN'), null);
+});
+
+test('shipping address phone is used before the order phone', () => {
+  const contact = readContact(order({
+    phone: '+919000000001',
+    shipping_address: { phone: '9243023483', country_code: 'IN' },
+  }));
+  assert.equal(contact.recipient, '919243023483');
+});
+
+// Fields copied from the first live website order (#1021, 2026-10-09), customer data replaced.
+test('reads the first live website order the same way it will be sent', () => {
+  const live = {
+    id: 18921794109692,
+    admin_graphql_api_id: 'gid://shopify/Order/18921794109692',
+    name: '#1021',
+    source_name: 'web',
+    phone: '+919876543210',
+    order_status_url: 'https://thaazhai.com/81506271484/orders/token/authenticate?key=key',
+    note_attributes: [{ name: 'GoKwik-Cart', value: 'true' }, { name: '_gk_route', value: 'native' }],
+    customer: { first_name: 'Kavya', phone: '+919876543210' },
+    shipping_address: { first_name: 'Kavya', name: 'Kavya R', phone: '9876543210', country_code: 'IN' },
+  };
+  assert.deepEqual(readOrder(live), {
+    orderId: '18921794109692',
+    source: 'web',
+    customerName: 'Kavya',
+    orderNumber: '#1021',
+    statusUrl: live.order_status_url,
+    recipient: '919876543210',
+    // The live checkout does not yet ask for WhatsApp opt-in.
+    consent: false,
+  });
 });
 
 test('shipped message only for fully fulfilled orders', () => {

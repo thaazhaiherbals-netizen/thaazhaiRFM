@@ -126,8 +126,9 @@ async function shopifyWebhook({ req, config, pool, log }) {
 
 // null when the message can be sent, otherwise the reason it is not sent.
 function whySkipped(order) {
+  if (order.source !== 'web') return 'not_website_order';
   if (!order.consent) return 'no_whatsapp_opt_in';
-  if (!order.recipient) return 'no_international_phone';
+  if (!order.recipient) return 'no_valid_phone';
   if (!order.statusUrl) return 'no_order_status_url';
   return null;
 }

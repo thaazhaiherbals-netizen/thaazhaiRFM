@@ -51,9 +51,14 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 ### Rules it follows
 
 - **Only Shopify, only our store:** unsigned/wrongly signed requests get 401, other stores 403.
+- **Website orders only:** `source_name` must be `web`; POS/draft/app orders are skipped.
+- **Who and where:** name and phone come from the shipping address first (first name,
+  else first word of the full name), then the customer/order. Shopify stores address
+  phones as typed (`9243023483`), so an Indian 10-digit mobile gets the `91` prefix;
+  any other number without a country code is skipped, never guessed.
 - **Consent:** a message is sent only when the order has the note attribute
-  `whatsapp_opt_in=true` **and** an international phone (`+91…`). Otherwise the row is
-  saved as `skipped` with the reason in `error`. SMS/email marketing consent does not count.
+  `whatsapp_opt_in=true` **and** a valid phone. Otherwise the row is saved as `skipped`
+  with the reason in `error`. SMS/email marketing consent does not count.
 - **Exact order ids:** read from `admin_graphql_api_id`, because very large numeric ids
   lose digits in JavaScript.
 - **Never twice:** one row per (shop, order, event). Shopify retries → `duplicate`.
@@ -66,7 +71,7 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 | State | Meaning | Action |
 |---|---|---|
 | `pending` | Waiting to send (or waiting after a rate limit) | none |
-| `skipped` | No opt-in, no international phone or no status link (see `error`) | none |
+| `skipped` | Not a website order, no opt-in, no valid phone or no status link (see `error`) | none |
 | `sending` | Being sent right now. Stuck here after a crash = unknown | check Meta |
 | `unknown` | Timeout / Meta 5xx: may or may not have been delivered | check Meta, then requeue if not sent |
 | `accepted` | Meta accepted the message (`message_id`). Not proof of delivery/read | none |
@@ -116,9 +121,9 @@ After the release PR is merged into `main`:
    Copy the signing secret shown on that page into `SHOPIFY_WEBHOOK_SECRET`.
    (Add **Order fulfillment** too if you want to inspect that event.)
 7. Test: place a test order → Railway logs show one `shopify_webhook_received` line.
-   Its `notification` field shows exactly what would be sent: `customerName`,
+   Its `notification` field shows exactly what would be sent: `source`, `customerName`,
    `orderNumber`, `statusUrl`, `recipient`, `consent`, `wouldSend` and `skipReason`
-   (`no_whatsapp_opt_in`, `no_international_phone` or `no_order_status_url`).
+   (`not_website_order`, `no_whatsapp_opt_in`, `no_valid_phone` or `no_order_status_url`).
 
 ### Switching to send mode (after templates are approved)
 
