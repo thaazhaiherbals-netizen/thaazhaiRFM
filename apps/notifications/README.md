@@ -80,7 +80,9 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 ### Rules it follows
 
 - **Only Shopify, only our store:** unsigned/wrongly signed requests get 401, other stores 403.
-- **Website orders only:** `source_name` must be `web`; POS/draft/app orders are skipped.
+- **Which orders:** `source_name` must be in `NOTIFY_ORDER_SOURCES` (default
+  `web,shopify_draft_order`: website checkout and orders created in Shopify admin).
+  POS and app orders are skipped unless added there.
 - **Name:** shipping address first name, else first word of its full name, then the
   customer/billing first name, else "Customer".
 - **Phone:** the first valid number from `phone` (checkout contact), `shipping_address`,
@@ -103,7 +105,7 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 | State | Meaning | Action |
 |---|---|---|
 | `pending` | Waiting to send (or waiting after a rate limit) | none |
-| `skipped` | Not a website order, no valid phone or unusable status link (see `error`) | none |
+| `skipped` | Order source not enabled, no valid phone or unusable status link (see `error`) | none |
 | `sending` | Being sent right now. Stuck here after a crash = unknown | check Meta |
 | `unknown` | Timeout / Meta 5xx: may or may not have been delivered | check Meta, then requeue if not sent |
 | `accepted` | Meta accepted the message (`message_id`). Not proof of delivery/read | none |
@@ -155,7 +157,7 @@ After the release PR is merged into `main`:
 7. Test: place a test order → Railway logs show one `shopify_webhook_received` line.
    Its `notification` field shows exactly what would be sent: `source`, `customerName`,
    `orderNumber`, `statusUrl`, `recipient`, `phoneSource`, `buttonPath`, `wouldSend` and
-   `skipReason` (`not_website_order`, `no_valid_phone`, `no_order_status_url` or
+   `skipReason` (`order_source_not_enabled`, `no_valid_phone`, `no_order_status_url` or
    `unexpected_order_status_url`).
 
 ### Switching to send mode (after templates are approved)
@@ -180,6 +182,7 @@ After the release PR is merged into `main`:
    WA_TEMPLATE_LANGUAGE=en       # exact language code of the approved template
    WA_HEADER_IMAGE_URL=https://cdn.shopify.com/s/files/1/0815/0627/1484/files/THAAZHAI_LOGO.jpg?v=1791356834
    WA_STATUS_BUTTON_BASE_URL=https://thaazhai.com/81506271484/orders/   # optional, this is the default
+   NOTIFY_ORDER_SOURCES=web,shopify_draft_order   # optional, this is the default
    WA_SHIPPED_TEMPLATE=<only once approved>
    ```
 

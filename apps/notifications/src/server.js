@@ -83,7 +83,7 @@ async function shopifyWebhook({ req, config, pool, log }) {
   if (!order) throw new HttpError(400, 'Invalid order payload');
   const webhookId = req.headers['x-shopify-webhook-id'] || '';
   const buttonPath = statusButtonPath(order.statusUrl, config.whatsapp.statusButtonBaseUrl);
-  const skipReason = whySkipped(order, buttonPath);
+  const skipReason = whySkipped(order, buttonPath, config.shopify.orderSources);
 
   // 3a. receive_only mode: log the event plus what WOULD be sent, without sending.
   // The payload contains customer details, so Railway log access must stay restricted.
@@ -126,8 +126,8 @@ async function shopifyWebhook({ req, config, pool, log }) {
 }
 
 // null when the message can be sent, otherwise the reason it is not sent.
-function whySkipped(order, buttonPath) {
-  if (order.source !== 'web') return 'not_website_order';
+function whySkipped(order, buttonPath, orderSources) {
+  if (!orderSources.includes(order.source)) return 'order_source_not_enabled';
   if (!order.recipient) return 'no_valid_phone';
   if (!order.statusUrl) return 'no_order_status_url';
   if (!buttonPath) return 'unexpected_order_status_url';

@@ -19,7 +19,7 @@ export function readOrder(order) {
   if (!orderId) return null;
   return {
     orderId,
-    // Only storefront orders get a message ("web"); POS, draft and app orders do not.
+    // Sales channel, e.g. web or shopify_draft_order; see NOTIFY_ORDER_SOURCES.
     source: typeof order.source_name === 'string' ? order.source_name : null,
     // Template variable {{1}}: customer's first name.
     customerName: readCustomerName(order),
