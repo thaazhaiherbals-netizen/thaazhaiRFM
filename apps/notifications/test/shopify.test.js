@@ -147,6 +147,11 @@ test('send mode refuses to start with missing or invalid settings', () => {
   );
   assert.equal(loadConfig({}).mode, 'receive_only');
   assert.deepEqual(loadConfig({}).shopify.orderSources, ['web', 'shopify_draft_order']);
+  assert.deepEqual(loadConfig({}).whatsapp.testRecipients, []);
+  assert.deepEqual(
+    loadConfig({ WA_TEST_RECIPIENTS: '+91 98765 43210, 919000000001' }).whatsapp.testRecipients,
+    ['919876543210', '919000000001'],
+  );
   assert.deepEqual(loadConfig({ NOTIFY_ORDER_SOURCES: ' web , pos ,' }).shopify.orderSources, ['web', 'pos']);
   assert.equal(loadConfig(SEND_SETTINGS).mode, 'send');
 });

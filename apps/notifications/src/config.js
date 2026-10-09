@@ -39,6 +39,12 @@ export function loadConfig(env = process.env) {
       // image uploaded in WhatsApp Manager is only a review sample; every message must
       // send the image again. Leave unset only for a template without an image header.
       headerImageUrl: env.WA_HEADER_IMAGE_URL || '',
+      // Test switch: when set, ONLY these numbers get messages (digits with country code,
+      // comma-separated, e.g. 919876543210). Everyone else is skipped. Empty = everyone.
+      testRecipients: (env.WA_TEST_RECIPIENTS || '')
+        .split(',')
+        .map((number) => number.replace(/\D/g, ''))
+        .filter(Boolean),
       // Fixed start of the template's "Track order" button link, exactly as entered in
       // WhatsApp Manager (before {{1}}). Each order's link must start with it.
       statusButtonBaseUrl:
