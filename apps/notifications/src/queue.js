@@ -20,14 +20,17 @@ export function createPool(database) {
 export async function enqueue(pool, notification) {
   const result = await pool.query(
     `INSERT INTO order_notifications
-       (shop, order_id, order_name, topic, webhook_id, recipient, state, error)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (shop, order_id, order_name, customer_name, order_status_url,
+        topic, webhook_id, recipient, state, error)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (shop, order_id, topic) DO NOTHING
      RETURNING id`,
     [
       notification.shop,
       notification.orderId,
-      notification.orderName,
+      notification.orderNumber,
+      notification.customerName,
+      notification.statusUrl,
       notification.topic,
       notification.webhookId,
       notification.recipient,
@@ -52,7 +55,7 @@ export async function claimNext(pool) {
        FOR UPDATE SKIP LOCKED
        LIMIT 1
      )
-     RETURNING id, topic, recipient, order_name, attempts`,
+     RETURNING id, topic, recipient, customer_name, order_name, order_status_url, attempts`,
   );
   return result.rows[0] || null;
 }

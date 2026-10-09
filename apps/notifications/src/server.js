@@ -6,7 +6,7 @@ import http from 'node:http';
 
 import { TEMPLATE_VARIABLES, shopifyConfigured } from './config.js';
 import { checkQueue, enqueue } from './queue.js';
-import { isFullyFulfilled, isValidSignature, readContact } from './shopify.js';
+import { isFullyFulfilled, isValidSignature, readOrder } from './shopify.js';
 
 const MAX_BODY_BYTES = 2_000_000;
 
@@ -73,44 +73,47 @@ async function shopifyWebhook({ req, config, pool, log }) {
   const topic = req.headers['x-shopify-topic'] || '';
   if (!(topic in TEMPLATE_VARIABLES)) return { status: 'ignored' };
 
-  let order;
+  let payload;
   try {
-    order = JSON.parse(rawBody.toString('utf8'));
+    payload = JSON.parse(rawBody.toString('utf8'));
   } catch {
     throw new HttpError(400, 'Invalid JSON payload');
   }
-  if (!order || typeof order !== 'object' || !Number.isInteger(order.id)) {
-    throw new HttpError(400, 'Invalid order payload');
-  }
+  const order = payload && typeof payload === 'object' ? readOrder(payload) : null;
+  if (!order) throw new HttpError(400, 'Invalid order payload');
   const webhookId = req.headers['x-shopify-webhook-id'] || '';
+  const skipReason = whySkipped(order);
 
-  // 3a. receive_only mode: just log the event so we can inspect real Shopify data.
+  // 3a. receive_only mode: log the event plus what WOULD be sent, without sending.
   // The payload contains customer details, so Railway log access must stay restricted.
   if (config.mode === 'receive_only') {
-    log.info(JSON.stringify({ event: 'shopify_webhook_received', topic, shop: shopDomain, webhookId, payload: order }));
+    log.info(JSON.stringify({
+      event: 'shopify_webhook_received',
+      topic,
+      shop: shopDomain,
+      webhookId,
+      notification: { ...order, wouldSend: !skipReason, skipReason },
+      payload,
+    }));
     return { status: 'logged' };
   }
 
   // 3b. send mode: save a notification row; the sender delivers it in the background.
   if (!config.whatsapp.templates[topic]) return { status: 'disabled' };
-  if (topic === 'orders/fulfilled' && !isFullyFulfilled(order)) {
+  if (topic === 'orders/fulfilled' && !isFullyFulfilled(payload)) {
     return { status: 'not_fully_fulfilled' };
   }
   if (!webhookId) throw new HttpError(400, 'Missing webhook ID');
 
-  const { recipient, consent } = readContact(order);
-  const canSend = Boolean(recipient && consent);
   let saved;
   try {
     saved = await enqueue(pool, {
+      ...order,
       shop: shopDomain,
-      orderId: String(order.id),
-      orderName: String(order.name || order.id),
       topic,
       webhookId,
-      recipient,
-      state: canSend ? 'pending' : 'skipped',
-      error: canSend ? null : 'missing_whatsapp_opt_in_or_international_phone',
+      state: skipReason ? 'skipped' : 'pending',
+      error: skipReason,
     });
   } catch (error) {
     // A non-200 answer makes Shopify retry the webhook later, so nothing is lost.
@@ -118,7 +121,15 @@ async function shopifyWebhook({ req, config, pool, log }) {
     throw new HttpError(503, 'Queue unavailable; retry delivery');
   }
   if (!saved) return { status: 'duplicate' };
-  return { status: canSend ? 'pending' : 'skipped' };
+  return { status: skipReason ? 'skipped' : 'pending' };
+}
+
+// null when the message can be sent, otherwise the reason it is not sent.
+function whySkipped(order) {
+  if (order.source !== 'web') return 'not_website_order';
+  if (!order.recipient) return 'no_valid_phone';
+  if (!order.statusUrl) return 'no_order_status_url';
+  return null;
 }
 
 async function readBody(req) {
