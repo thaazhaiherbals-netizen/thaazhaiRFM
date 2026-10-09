@@ -53,7 +53,7 @@ function readCustomerName(order) {
   return String(name).trim() || 'Customer';
 }
 
-// recipient: see toWhatsAppNumber() below.
+// recipient: see toWhatsAppNumber() below; phoneSource: the field it came from.
 // consent: true only when checkout saved the note attribute whatsapp_opt_in=true.
 // SMS/email marketing consent is NOT treated as WhatsApp consent.
 export function readContact(order) {
@@ -63,13 +63,31 @@ export function readContact(order) {
       attribute?.name === 'whatsapp_opt_in' && String(attribute.value).toLowerCase() === 'true',
   );
 
-  // Shipping address phone first (the person receiving the parcel), then the order phone.
+  // First valid number wins, so a blank or mistyped number in one place falls through.
   const shipping = order.shipping_address;
-  const recipient =
-    toWhatsAppNumber(shipping?.phone, shipping?.country_code) ||
-    toWhatsAppNumber(order.phone, shipping?.country_code);
+  const billing = order.billing_address;
+  const saved = order.customer?.default_address;
+  // order.phone has no address of its own; use the shipping, then billing country.
+  const orderCountry = shipping?.country_code || billing?.country_code;
+  const candidates = [
+    // Contact number the buyer typed at checkout for order updates.
+    ['phone', order.phone, orderCountry],
+    ['shipping_address', shipping?.phone, shipping?.country_code],
+    ['billing_address', billing?.phone, billing?.country_code],
+    // Saved on the customer profile, so possibly older than this order.
+    ['customer_default_address', saved?.phone, saved?.country_code],
+  ];
+  let recipient = null;
+  let phoneSource = null;
+  for (const [source, phone, countryCode] of candidates) {
+    recipient = toWhatsAppNumber(phone, countryCode);
+    if (recipient) {
+      phoneSource = source;
+      break;
+    }
+  }
 
-  return { recipient, consent };
+  return { recipient, phoneSource, consent };
 }
 
 // Phone in WhatsApp format (digits only, country code first) or null.

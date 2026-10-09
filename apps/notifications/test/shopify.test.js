@@ -23,12 +23,15 @@ test('accepts only the exact Shopify signature', () => {
 });
 
 test('reads an opted-in international phone', () => {
-  assert.deepEqual(readContact(order()), { recipient: '919876543210', consent: true });
+  assert.deepEqual(readContact(order()), {
+    recipient: '919876543210', phoneSource: 'phone', consent: true,
+  });
 });
 
 test('falls back to the shipping address phone', () => {
   const contact = readContact(order({ phone: null, shipping_address: { phone: '+91-98765-43210' } }));
   assert.equal(contact.recipient, '919876543210');
+  assert.equal(contact.phoneSource, 'shipping_address');
 });
 
 test('no recipient without a country code, no consent without the opt-in attribute', () => {
@@ -69,12 +72,39 @@ test('Indian address phones without +91 get the 91 prefix; others need a country
   assert.equal(toWhatsAppNumber(null, 'IN'), null);
 });
 
-test('shipping address phone is used before the order phone', () => {
-  const contact = readContact(order({
+test('phone order: order, shipping, billing, saved address; first valid wins', () => {
+  const all = {
     phone: '+919000000001',
-    shipping_address: { phone: '9243023483', country_code: 'IN' },
-  }));
-  assert.equal(contact.recipient, '919243023483');
+    shipping_address: { phone: '9000000002', country_code: 'IN' },
+    billing_address: { phone: '9000000003', country_code: 'IN' },
+    customer: { default_address: { phone: '9000000004', country_code: 'IN' } },
+  };
+  const pick = (extra) => {
+    const { recipient, phoneSource } = readContact({ ...all, ...extra });
+    return [recipient, phoneSource];
+  };
+  assert.deepEqual(pick({}), ['919000000001', 'phone']);
+  // Invalid or blank numbers fall through to the next place.
+  assert.deepEqual(pick({ phone: '12345' }), ['919000000002', 'shipping_address']);
+  assert.deepEqual(
+    pick({ phone: '', shipping_address: { phone: 'n/a', country_code: 'IN' } }),
+    ['919000000003', 'billing_address'],
+  );
+  assert.deepEqual(
+    pick({ phone: null, shipping_address: null, billing_address: { phone: '' } }),
+    ['919000000004', 'customer_default_address'],
+  );
+  assert.deepEqual(
+    pick({ phone: null, shipping_address: null, billing_address: null, customer: null }),
+    [null, null],
+  );
+});
+
+test('order phone without +91 uses the shipping, then billing country', () => {
+  const base = { phone: '9243023483' };
+  assert.equal(readContact({ ...base, shipping_address: { country_code: 'IN' } }).recipient, '919243023483');
+  assert.equal(readContact({ ...base, billing_address: { country_code: 'IN' } }).recipient, '919243023483');
+  assert.equal(readContact(base).recipient, null);
 });
 
 // Fields copied from the first live website order (#1021, 2026-10-09), customer data replaced.
@@ -97,6 +127,7 @@ test('reads the first live website order the same way it will be sent', () => {
     orderNumber: '#1021',
     statusUrl: live.order_status_url,
     recipient: '919876543210',
+    phoneSource: 'phone',
     // The live checkout does not yet ask for WhatsApp opt-in.
     consent: false,
   });

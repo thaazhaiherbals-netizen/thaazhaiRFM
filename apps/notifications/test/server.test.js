@@ -40,6 +40,7 @@ describe('receive_only mode', () => {
       orderNumber: '#1001',
       statusUrl: order().order_status_url,
       recipient: '919876543210',
+      phoneSource: 'phone',
       consent: true,
       wouldSend: true,
       skipReason: null,

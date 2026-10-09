@@ -52,10 +52,13 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 
 - **Only Shopify, only our store:** unsigned/wrongly signed requests get 401, other stores 403.
 - **Website orders only:** `source_name` must be `web`; POS/draft/app orders are skipped.
-- **Who and where:** name and phone come from the shipping address first (first name,
-  else first word of the full name), then the customer/order. Shopify stores address
-  phones as typed (`9243023483`), so an Indian 10-digit mobile gets the `91` prefix;
-  any other number without a country code is skipped, never guessed.
+- **Name:** shipping address first name, else first word of its full name, then the
+  customer/billing first name, else "Customer".
+- **Phone:** the first valid number from `phone` (checkout contact), `shipping_address`,
+  `billing_address`, then `customer.default_address`; blank or invalid numbers fall
+  through to the next. Shopify stores address phones as typed (`9243023483`), so an
+  Indian 10-digit mobile gets the `91` prefix (for `phone`, the shipping/billing country
+  is used); any other number without a country code is skipped, never guessed.
 - **Consent:** a message is sent only when the order has the note attribute
   `whatsapp_opt_in=true` **and** a valid phone. Otherwise the row is saved as `skipped`
   with the reason in `error`. SMS/email marketing consent does not count.
@@ -122,7 +125,7 @@ After the release PR is merged into `main`:
    (Add **Order fulfillment** too if you want to inspect that event.)
 7. Test: place a test order → Railway logs show one `shopify_webhook_received` line.
    Its `notification` field shows exactly what would be sent: `source`, `customerName`,
-   `orderNumber`, `statusUrl`, `recipient`, `consent`, `wouldSend` and `skipReason`
+   `orderNumber`, `statusUrl`, `recipient`, `phoneSource`, `consent`, `wouldSend` and `skipReason`
    (`not_website_order`, `no_whatsapp_opt_in`, `no_valid_phone` or `no_order_status_url`).
 
 ### Switching to send mode (after templates are approved)
