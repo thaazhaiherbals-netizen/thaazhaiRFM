@@ -3,24 +3,53 @@
 A small Node.js service that receives Shopify order webhooks and sends the customer an
 approved WhatsApp template message.
 
-Both templates take the same **three body variables, in this order**:
+Both templates have the same shape: **two body variables** and, as the **first button**,
+a "Track order" URL button whose link ends in one variable:
 
 | Variable | Value | Taken from the Shopify order |
 |---|---|---|
-| `{{1}}` | Customer first name | `customer.first_name`, else shipping, else billing first name, else "Customer" |
-| `{{2}}` | Order number, e.g. `#1001` | `name` |
-| `{{3}}` | Order status link | `order_status_url` (orders without one are skipped) |
+| Body `{{1}}` | Customer first name | shipping first name, else first word of shipping name, else customer/billing first name, else "Customer" |
+| Body `{{2}}` | Order number, e.g. `#1001` | `name` |
+| Button `{{1}}` | End of the order status link | `order_status_url` after `WA_STATUS_BUTTON_BASE_URL` (orders whose link does not start with it are skipped) |
 
-Suggested template text (Meta category **Utility**; a template may not start or end
-with a variable, so each ends with text):
+### Order confirmation template (`orders/create`)
 
-| Shopify event | Template text |
-|---|---|
-| `orders/create` | Hi {{1}}, thank you for shopping with Thaazhai! Your order {{2}} is confirmed. You can check your order status here: {{3}} We will message you again when it ships. |
-| `orders/fulfilled` (fully fulfilled only) | Hi {{1}}, good news! Your Thaazhai order {{2}} has been shipped. Track it here: {{3}} Thank you for shopping with us. |
+Create in WhatsApp Manager → Message templates:
 
-When submitting each template to Meta, give sample values such as `Priya`, `#1001`,
-`https://thaazhai.com/…/orders/…/authenticate?key=…`. No header or button variables.
+- **Name** `order_confirmation` (→ `WA_ORDER_TEMPLATE`), **category** Utility,
+  **language** English `en` (→ `WA_TEMPLATE_LANGUAGE`).
+- **Header**: **Image**. Upload the brand logo as the sample. The upload is only for
+  review: every message sends the image from `WA_HEADER_IMAGE_URL`, so keep that set
+  (currently the Shopify Files link to `THAAZHAI_LOGO.jpg`).
+- **Body** (a template may not start or end with a variable):
+
+  ```
+  *Order confirmed* ✅
+
+  Hi {{1}}, thank you for shopping with Thaazhai! 🌿
+
+  Your order {{2}} has been placed successfully. We will update you on WhatsApp as soon as it is shipped.
+
+  Tap "Track order" below to view your order details and status anytime.
+
+  This is an automated message and replies are not monitored. For any help, please tap "Call us".
+  ```
+
+- **Footer**: `Thaazhai – Natural Herbal Care`
+- **Buttons** (Call to action), in this order:
+  1. **Visit website**, text `Track order`, URL type **Dynamic**,
+     URL `https://thaazhai.com/81506271484/orders/{{1}}`
+  2. **Call phone number**, text `Call us`, the support number (static, no variable).
+- **Samples**: body `Bharathi`, `#1021`; button
+  `77ec8fdb5ebd8702b73cfabde46b08e3/authenticate?key=sample`.
+
+The button URL before `{{1}}` must equal `WA_STATUS_BUTTON_BASE_URL` (default
+`https://thaazhai.com/81506271484/orders/`). If the store domain changes, update both.
+
+### Shipped template (`orders/fulfilled`, fully fulfilled only — later)
+
+Same shape: body `Hi {{1}}, good news! Your Thaazhai order {{2}} has been shipped. …`
+with the same `Track order` button first.
 
 Plain JavaScript, Node 22+, Node's built-in `http`/`crypto`/`fetch`/`node:test`, and one
 dependency (`pg`). It is independent of the Python API, worker and web app.
@@ -74,7 +103,7 @@ Shopify ──POST /webhooks/shopify──▶ server.js
 | State | Meaning | Action |
 |---|---|---|
 | `pending` | Waiting to send (or waiting after a rate limit) | none |
-| `skipped` | Not a website order, no valid phone or no status link (see `error`) | none |
+| `skipped` | Not a website order, no valid phone or unusable status link (see `error`) | none |
 | `sending` | Being sent right now. Stuck here after a crash = unknown | check Meta |
 | `unknown` | Timeout / Meta 5xx: may or may not have been delivered | check Meta, then requeue if not sent |
 | `accepted` | Meta accepted the message (`message_id`). Not proof of delivery/read | none |
@@ -125,12 +154,15 @@ After the release PR is merged into `main`:
    (Add **Order fulfillment** too if you want to inspect that event.)
 7. Test: place a test order → Railway logs show one `shopify_webhook_received` line.
    Its `notification` field shows exactly what would be sent: `source`, `customerName`,
-   `orderNumber`, `statusUrl`, `recipient`, `phoneSource`, `wouldSend` and `skipReason`
-   (`not_website_order`, `no_valid_phone` or `no_order_status_url`).
+   `orderNumber`, `statusUrl`, `recipient`, `phoneSource`, `buttonPath`, `wouldSend` and
+   `skipReason` (`not_website_order`, `no_valid_phone`, `no_order_status_url` or
+   `unexpected_order_status_url`).
 
 ### Switching to send mode (after templates are approved)
 
-1. Meta: approved utility template(s) with the three body variables above, no header/button variables.
+1. Meta: approved utility template(s) exactly as described at the top (two body variables,
+   `Track order` dynamic URL button first). The sending number must be connected to the
+   WhatsApp Cloud API (listed under API phone numbers in WhatsApp Manager).
 2. Shopify checkout: phone field text saying order updates are sent to this number on WhatsApp.
 3. Review `db/migrations/016_order_notifications.sql`, then once, in the Railway service shell:
    `npm run migrate` (with `APP_ENV=production` and `DATABASE_URL` set). It applies only
@@ -146,6 +178,8 @@ After the release PR is merged into `main`:
    WA_GRAPH_VERSION=v21.0        # a version your Meta app supports
    WA_ORDER_TEMPLATE=<approved template name>
    WA_TEMPLATE_LANGUAGE=en       # exact language code of the approved template
+   WA_HEADER_IMAGE_URL=https://cdn.shopify.com/s/files/1/0815/0627/1484/files/THAAZHAI_LOGO.jpg?v=1791356834
+   WA_STATUS_BUTTON_BASE_URL=https://thaazhai.com/81506271484/orders/   # optional, this is the default
    WA_SHIPPED_TEMPLATE=<only once approved>
    ```
 

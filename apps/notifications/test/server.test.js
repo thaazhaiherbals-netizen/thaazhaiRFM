@@ -41,9 +41,16 @@ describe('receive_only mode', () => {
       statusUrl: order().order_status_url,
       recipient: '919876543210',
       phoneSource: 'phone',
+      buttonPath: 'abc/authenticate?key=xyz',
       wouldSend: true,
       skipReason: null,
     });
+  });
+
+  test('a status link outside the button base URL would not be sent', async () => {
+    await postWebhook(app.baseUrl, order({ order_status_url: 'https://other.example/orders/abc' }));
+    assert.equal(logged.at(-1).notification.buttonPath, null);
+    assert.equal(logged.at(-1).notification.skipReason, 'unexpected_order_status_url');
   });
 
   test('non-website orders are logged but would not be sent', async () => {
@@ -89,7 +96,7 @@ describe('send mode', () => {
   });
   after(() => app.server.close());
 
-  test('queues an opted-in order once, even when Shopify retries the webhook', async () => {
+  test('queues an order once, even when Shopify retries the webhook', async () => {
     assert.deepEqual((await postWebhook(app.baseUrl, order())).body, { status: 'pending' });
     assert.deepEqual((await postWebhook(app.baseUrl, order(), { 'x-shopify-webhook-id': 'retry' })).body, { status: 'duplicate' });
     assert.deepEqual(rows.get(`${SHOP}|1001|orders/create`), {

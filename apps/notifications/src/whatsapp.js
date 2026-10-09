@@ -1,11 +1,21 @@
+import { statusButtonPath } from './shopify.js';
+
 // Sends one approved WhatsApp template through the Meta Cloud API and turns the
 // response into a queue outcome. No database access here.
 
 const MAX_ATTEMPTS = 5;
 
-// The approved templates take exactly three body variables, in this order:
-//   {{1}} customer first name, {{2}} order number (#1001), {{3}} order status link.
-export function buildMessage({ recipient, templateName, language, customerName, orderNumber, statusUrl }) {
+// The approved templates take two body variables, {{1}} customer first name and
+// {{2}} order number (#1001), and the FIRST button is a "Track order" URL button whose
+// link ends in {{1}}: the order status path after WA_STATUS_BUTTON_BASE_URL.
+// Any other button (e.g. "Call us") is static and needs no parameter.
+// headerImageUrl, when set, fills the template's image header.
+export function buildMessage({
+  recipient, templateName, language, headerImageUrl, customerName, orderNumber, buttonPath,
+}) {
+  const header = headerImageUrl
+    ? [{ type: 'header', parameters: [{ type: 'image', image: { link: headerImageUrl } }] }]
+    : [];
   return {
     messaging_product: 'whatsapp',
     to: recipient,
@@ -14,13 +24,19 @@ export function buildMessage({ recipient, templateName, language, customerName, 
       name: templateName,
       language: { code: language },
       components: [
+        ...header,
         {
           type: 'body',
           parameters: [
             { type: 'text', text: customerName },
             { type: 'text', text: orderNumber },
-            { type: 'text', text: statusUrl },
           ],
+        },
+        {
+          type: 'button',
+          sub_type: 'url',
+          index: '0',
+          parameters: [{ type: 'text', text: buttonPath }],
         },
       ],
     },
@@ -31,13 +47,21 @@ export function buildMessage({ recipient, templateName, language, customerName, 
 export async function sendTemplate(whatsapp, notification, fetchImpl = fetch) {
   const url =
     `https://graph.facebook.com/${whatsapp.graphVersion}/${whatsapp.phoneNumberId}/messages`;
+  const buttonPath = statusButtonPath(
+    notification.order_status_url,
+    whatsapp.statusButtonBaseUrl,
+  );
+  // Only possible if WA_STATUS_BUTTON_BASE_URL changed after the row was queued.
+  if (!buttonPath) return { state: 'failed', error: 'unexpected_order_status_url' };
+
   const body = buildMessage({
     recipient: notification.recipient,
     templateName: whatsapp.templates[notification.topic],
     language: whatsapp.language,
+    headerImageUrl: whatsapp.headerImageUrl,
     customerName: notification.customer_name,
     orderNumber: notification.order_name,
-    statusUrl: notification.order_status_url,
+    buttonPath,
   });
 
   let response;
