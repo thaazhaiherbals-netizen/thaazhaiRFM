@@ -14,7 +14,15 @@ export function startSender({ pool, whatsapp, log = console, fetchImpl = fetch }
     if (!notification) return false;
     const outcome = await sendTemplate(whatsapp, notification, fetchImpl);
     await finish(pool, notification.id, outcome);
-    log.info(JSON.stringify({ event: 'whatsapp_send', id: notification.id, ...outcome }));
+    // Railway shows the "message" field as the log text; the rest are searchable attributes.
+    log.info(JSON.stringify({
+      message: `WhatsApp ${outcome.state} for ${notification.order_name}`
+        + (outcome.error ? ` (${outcome.error})` : ''),
+      event: 'whatsapp_send',
+      id: notification.id,
+      orderNumber: notification.order_name,
+      ...outcome,
+    }));
     return true;
   }
 
@@ -24,7 +32,7 @@ export function startSender({ pool, whatsapp, log = console, fetchImpl = fetch }
       try {
         sent = await sendNext();
       } catch (error) {
-        log.error(JSON.stringify({ event: 'sender_error', message: error.message }));
+        log.error(JSON.stringify({ message: `sender error: ${error.message}`, event: 'sender_error' }));
       }
       if (!sent && running) {
         await new Promise((resolve) => {
