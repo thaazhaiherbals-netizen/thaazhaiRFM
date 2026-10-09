@@ -121,8 +121,12 @@ async function shopifyWebhook({ req, config, pool, log }) {
     log.error(JSON.stringify({ event: 'enqueue_error', message: error.message }));
     throw new HttpError(503, 'Queue unavailable; retry delivery');
   }
-  if (!saved) return { status: 'duplicate' };
-  return { status: skipReason ? 'skipped' : 'pending' };
+  const status = !saved ? 'duplicate' : skipReason ? 'skipped' : 'pending';
+  // One line per order so every webhook can be traced in the logs (no phone or name).
+  log.info(JSON.stringify({
+    event: 'webhook_handled', topic, webhookId, orderNumber: order.orderNumber, status, skipReason,
+  }));
+  return { status };
 }
 
 // null when the message can be sent, otherwise the reason it is not sent.

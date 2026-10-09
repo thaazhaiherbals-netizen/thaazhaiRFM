@@ -93,14 +93,24 @@ describe('send mode', () => {
     },
   };
   let app;
+  const sendLog = [];
   before(async () => {
-    app = await start({ config: testConfig(SEND_SETTINGS), pool, sender: { isRunning: () => true } });
+    app = await start({
+      config: testConfig(SEND_SETTINGS),
+      pool,
+      sender: { isRunning: () => true },
+      log: { info: (line) => sendLog.push(JSON.parse(line)), error() {} },
+    });
   });
   after(() => app.server.close());
 
   test('queues an order once, even when Shopify retries the webhook', async () => {
     assert.deepEqual((await postWebhook(app.baseUrl, order())).body, { status: 'pending' });
     assert.deepEqual((await postWebhook(app.baseUrl, order(), { 'x-shopify-webhook-id': 'retry' })).body, { status: 'duplicate' });
+    assert.deepEqual(sendLog.map((line) => [line.event, line.orderNumber, line.status]), [
+      ['webhook_handled', '#1001', 'pending'],
+      ['webhook_handled', '#1001', 'duplicate'],
+    ]);
     assert.deepEqual(rows.get(`${SHOP}|1001|orders/create`), {
       orderNumber: '#1001',
       customerName: 'Priya',
