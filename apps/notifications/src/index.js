@@ -12,7 +12,10 @@ const sender = pool ? startSender({ pool, whatsapp: config.whatsapp }) : null;
 const server = createServer({ config, pool, sender });
 
 server.listen(config.port, '0.0.0.0', () => {
-  console.info(JSON.stringify({ event: 'started', mode: config.mode, port: config.port }));
+  console.info(JSON.stringify({
+    message: `started in ${config.mode} mode on port ${config.port}`,
+    event: 'started', mode: config.mode, port: config.port,
+  }));
 });
 
 // Railway sends SIGTERM on redeploy: stop taking requests, finish the current
