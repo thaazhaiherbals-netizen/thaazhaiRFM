@@ -56,6 +56,19 @@ test('sends name and order number in the body, status path in the button, record
   });
 });
 
+test('sends the brand image as the header when WA_HEADER_IMAGE_URL is set', async () => {
+  const image = 'https://cdn.shopify.com/s/files/1/0815/0627/1484/files/THAAZHAI_LOGO.jpg?v=1';
+  const withImage = testConfig({ ...SEND_SETTINGS, WA_HEADER_IMAGE_URL: image }).whatsapp;
+  const { calls, fetchImpl } = fakeFetch(200, { messages: [{ id: 'wamid.2' }] });
+  await sendTemplate(withImage, notification, fetchImpl);
+  const { components } = JSON.parse(calls[0].options.body).template;
+  assert.deepEqual(components[0], {
+    type: 'header',
+    parameters: [{ type: 'image', image: { link: image } }],
+  });
+  assert.deepEqual(components.map((component) => component.type), ['header', 'body', 'button']);
+});
+
 test('a status link that does not match the button base URL is not sent', async () => {
   const { calls, fetchImpl } = fakeFetch(200, { messages: [{ id: 'wamid.1' }] });
   const other = { ...notification, order_status_url: 'https://other.example/orders/abc' };

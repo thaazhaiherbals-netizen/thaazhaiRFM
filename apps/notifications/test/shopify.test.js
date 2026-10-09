@@ -141,6 +141,10 @@ test('send mode refuses to start with missing or invalid settings', () => {
   assert.throws(() => loadConfig({ NOTIFICATION_MODE: 'send' }), /DATABASE_URL/);
   assert.throws(() => loadConfig({ ...SEND_SETTINGS, WA_GRAPH_VERSION: '21' }), /WA_GRAPH_VERSION/);
   assert.throws(() => loadConfig({ NOTIFICATION_MODE: 'live' }), /NOTIFICATION_MODE/);
+  assert.throws(
+    () => loadConfig({ ...SEND_SETTINGS, WA_HEADER_IMAGE_URL: 'http://example.com/logo.jpg' }),
+    /WA_HEADER_IMAGE_URL/,
+  );
   assert.equal(loadConfig({}).mode, 'receive_only');
   assert.equal(loadConfig(SEND_SETTINGS).mode, 'send');
 });

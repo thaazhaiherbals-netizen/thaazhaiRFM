@@ -9,7 +9,13 @@ const MAX_ATTEMPTS = 5;
 // {{2}} order number (#1001), and the FIRST button is a "Track order" URL button whose
 // link ends in {{1}}: the order status path after WA_STATUS_BUTTON_BASE_URL.
 // Any other button (e.g. "Call us") is static and needs no parameter.
-export function buildMessage({ recipient, templateName, language, customerName, orderNumber, buttonPath }) {
+// headerImageUrl, when set, fills the template's image header.
+export function buildMessage({
+  recipient, templateName, language, headerImageUrl, customerName, orderNumber, buttonPath,
+}) {
+  const header = headerImageUrl
+    ? [{ type: 'header', parameters: [{ type: 'image', image: { link: headerImageUrl } }] }]
+    : [];
   return {
     messaging_product: 'whatsapp',
     to: recipient,
@@ -18,6 +24,7 @@ export function buildMessage({ recipient, templateName, language, customerName, 
       name: templateName,
       language: { code: language },
       components: [
+        ...header,
         {
           type: 'body',
           parameters: [
@@ -51,6 +58,7 @@ export async function sendTemplate(whatsapp, notification, fetchImpl = fetch) {
     recipient: notification.recipient,
     templateName: whatsapp.templates[notification.topic],
     language: whatsapp.language,
+    headerImageUrl: whatsapp.headerImageUrl,
     customerName: notification.customer_name,
     orderNumber: notification.order_name,
     buttonPath,

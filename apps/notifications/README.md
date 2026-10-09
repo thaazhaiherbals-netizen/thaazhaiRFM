@@ -18,10 +18,14 @@ Create in WhatsApp Manager → Message templates:
 
 - **Name** `order_confirmation` (→ `WA_ORDER_TEMPLATE`), **category** Utility,
   **language** English `en` (→ `WA_TEMPLATE_LANGUAGE`).
-- **Header** (text): `Order confirmed`
+- **Header**: **Image**. Upload the brand logo as the sample. The upload is only for
+  review: every message sends the image from `WA_HEADER_IMAGE_URL`, so keep that set
+  (currently the Shopify Files link to `THAAZHAI_LOGO.jpg`).
 - **Body** (a template may not start or end with a variable):
 
   ```
+  *Order confirmed* ✅
+
   Hi {{1}}, thank you for shopping with Thaazhai! 🌿
 
   Your order {{2}} has been placed successfully. We will update you on WhatsApp as soon as it is shipped.
@@ -174,6 +178,7 @@ After the release PR is merged into `main`:
    WA_GRAPH_VERSION=v21.0        # a version your Meta app supports
    WA_ORDER_TEMPLATE=<approved template name>
    WA_TEMPLATE_LANGUAGE=en       # exact language code of the approved template
+   WA_HEADER_IMAGE_URL=https://cdn.shopify.com/s/files/1/0815/0627/1484/files/THAAZHAI_LOGO.jpg?v=1791356834
    WA_STATUS_BUTTON_BASE_URL=https://thaazhai.com/81506271484/orders/   # optional, this is the default
    WA_SHIPPED_TEMPLATE=<only once approved>
    ```

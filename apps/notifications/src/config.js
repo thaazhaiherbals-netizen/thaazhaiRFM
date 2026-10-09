@@ -28,6 +28,10 @@ export function loadConfig(env = process.env) {
       phoneNumberId: env.WA_PHONE_NUMBER_ID || '',
       graphVersion: env.WA_GRAPH_VERSION || '',
       language: env.WA_TEMPLATE_LANGUAGE || 'en',
+      // Public https link to the brand image shown as the template's image header. The
+      // image uploaded in WhatsApp Manager is only a review sample; every message must
+      // send the image again. Leave unset only for a template without an image header.
+      headerImageUrl: env.WA_HEADER_IMAGE_URL || '',
       // Fixed start of the template's "Track order" button link, exactly as entered in
       // WhatsApp Manager (before {{1}}). Each order's link must start with it.
       statusButtonBaseUrl:
@@ -61,6 +65,9 @@ function validateSendSettings(config) {
   if (!config.whatsapp.templates['orders/create']) missing.push('WA_ORDER_TEMPLATE');
   if (missing.length > 0) {
     throw new Error(`Send mode needs these variables: ${missing.join(', ')}`);
+  }
+  if (config.whatsapp.headerImageUrl && !config.whatsapp.headerImageUrl.startsWith('https://')) {
+    throw new Error('WA_HEADER_IMAGE_URL must be an https:// link');
   }
   if (!/^v\d+\.\d+$/.test(config.whatsapp.graphVersion)) {
     throw new Error('WA_GRAPH_VERSION must look like v21.0');
